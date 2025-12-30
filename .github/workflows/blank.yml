@@ -29,41 +29,14 @@ jobs:
       run: |
         pip install mini-swe-agent requests
 
-    - name: 🧠 Generate patch with mini-swe-agent
+    - name: 🧠 Generate patch with MiniSWEAgent
       env:
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ISSUE_NUMBER: ${{ github.event.issue.number }}
         REPO: ${{ github.repository }}
+        GH_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
       run: |
-        git checkout -b agent-fix-${ISSUE_NUMBER}
-
-        python - << 'EOF'
-        import os, requests
-
-        issue_number = os.environ["ISSUE_NUMBER"]
-        repo = os.environ["REPO"]
-        token = os.environ["GITHUB_TOKEN"]
-
-        headers = {"Authorization": f"Bearer {token}"}
-        issue = requests.get(
-            f"https://api.github.com/repos/{repo}/issues/{issue_number}",
-            headers=headers
-        ).json()
-
-        issue_text = f"""
-        Title: {issue['title']}
-
-        Description:
-        {issue.get('body', '')}
-        """
-
-        with open("ISSUE.txt", "w") as f:
-            f.write(issue_text)
-        EOF
-
-        mini -v "Fix the GitHub issue: https://github.com/SeekingDream/AgentTestRepo/issues/109"
-
+        python agent/generate_patch.py
+        
     - name: 🧪 Run tests
       run: |
         python agent/run_tests.py

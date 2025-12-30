@@ -37,7 +37,7 @@ jobs:
         REPO: ${{ github.repository }}
         GH_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
       run: |
-        python src/minisweagent/run/extra/github_issue.py https://github.com/SeekingDream/AgentTestRepo/issues/109
+        python mini-swe-agent/src/minisweagent/run/extra/github_issue.py https://github.com/SeekingDream/AgentTestRepo/issues/109
         
     - name: 🧪 Run tests
       run: |

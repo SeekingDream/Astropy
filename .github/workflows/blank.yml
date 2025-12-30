@@ -62,7 +62,7 @@ jobs:
             f.write(issue_text)
         EOF
 
-        mini-swe-agent --issue-file ISSUE.txt
+        mini -v "Fix the GitHub issue: https://github.com/SeekingDream/AgentTestRepo/issues/109"
 
     - name: 🧪 Run tests
       run: |

@@ -32,6 +32,7 @@ jobs:
         git clone https://x-access-token:${GH_TOKEN}@github.com/SeekingDream/minisweagent.git
         cd minisweagent
         pip install -e .
+        pip install google-cloud-aiplatform
 
     - name: 🧠 Generate patch with MiniSWEAgent
       env:

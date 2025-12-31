@@ -27,8 +27,8 @@ jobs:
 
     - name: Install dependencies
       run: |
-        git clone https://github.com/SWE-agent/mini-swe-agent.git
-        cd mini-swe-agent
+        git clone git@github.com:SeekingDream/minisweagent.git
+        cd minisweagent
         pip install -e .
 
     - name: 🧠 Generate patch with MiniSWEAgent
@@ -37,8 +37,11 @@ jobs:
         REPO: ${{ github.repository }}
         GH_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
       run: |
-        python mini-swe-agent/src/minisweagent/run/extra/github_issue.py main \
-        --issue_url https://github.com/SeekingDream/AgentTestRepo/issues/109
+        export GOOGLE_APPLICATION_CREDENTIALS=minisweagent/default_credentials.json
+        python minisweagent/src/minisweagent/run/extra/github_issue.py main \
+        --issue_url https://github.com/SeekingDream/AgentTestRepo/issues/109 \
+        --yolo \
+        --model "vertex_ai/gemini-2.5-pro"
         
     - name: 🧪 Run tests
       run: |

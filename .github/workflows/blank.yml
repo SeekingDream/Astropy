@@ -39,12 +39,15 @@ jobs:
         ISSUE_NUMBER: ${{ github.event.issue.number }}
         REPO: ${{ github.repository }}
         GH_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
+        GOOGLE_APPLICATION_CREDENTIALS: minisweagent/default_credentials.json
       run: |
-        export GOOGLE_APPLICATION_CREDENTIALS=minisweagent/default_credentials.json
+        ISSUE_URL="https://github.com/${REPO}/issues/${ISSUE_NUMBER}"
+    
         python minisweagent/src/minisweagent/run/extra/github_issue.py \
-          --issue-url "https://github.com/SeekingDream/AgentTestRepo/issues/110" \
+          --issue-url "${ISSUE_URL}" \
           --yolo \
           --model "vertex_ai/gemini-2.5-pro"
+
         
     - name: 🧪 Run tests
       run: |

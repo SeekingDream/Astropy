@@ -29,7 +29,7 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
       run: |
-        git clone git@github.com:SeekingDream/minisweagent.git
+        git clone https://x-access-token:${GH_TOKEN}@github.com/SeekingDream/minisweagent.git
         cd minisweagent
         pip install -e .
 

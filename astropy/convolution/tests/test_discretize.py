@@ -1,5 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import itertools
+
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
@@ -22,8 +24,9 @@ test_models_1D = [Gaussian1D, Box1D, RickerWavelet1D]
 test_models_2D = [Gaussian2D, Box2D, RickerWavelet2D]
 
 
-@pytest.mark.parametrize("model_class", test_models_1D)
-@pytest.mark.parametrize("mode", modes)
+@pytest.mark.parametrize(
+    ("model_class", "mode"), list(itertools.product(test_models_1D, modes))
+)
 def test_pixel_sum_1D(model_class, mode):
     """
     Test if the sum of all pixels corresponds nearly to the integral.
@@ -50,8 +53,9 @@ def test_gaussian_eval_1D(mode):
     assert_allclose(values, disc_values, atol=0.001)
 
 
-@pytest.mark.parametrize("model_class", test_models_2D)
-@pytest.mark.parametrize("mode", modes)
+@pytest.mark.parametrize(
+    ("model_class", "mode"), list(itertools.product(test_models_2D, modes))
+)
 def test_pixel_sum_2D(model_class, mode):
     """
     Test if the sum of all pixels corresponds nearly to the integral.
@@ -71,8 +75,9 @@ def test_pixel_sum_2D(model_class, mode):
     assert_allclose(values.sum(), models_2D[model_class]["integral"], atol=0.0001)
 
 
-@pytest.mark.parametrize("model_class", test_models_2D)
-@pytest.mark.parametrize("mode", modes)
+@pytest.mark.parametrize(
+    ("model_class", "mode"), list(itertools.product(test_models_2D, modes))
+)
 def test_pixel_sum_compound_2D(model_class, mode):
     """
     Test if the sum of all pixels of a compound model corresponds nearly to the integral.
@@ -197,7 +202,7 @@ def test_dim_exception_1d():
     def f(x):
         return x**2
 
-    with pytest.raises(ValueError, match=r"y_range should not be input for a 1D model"):
+    with pytest.raises(ValueError, match=r"y range specified, but model is only 1-d\."):
         discretize_model(f, (-10, 11), (-10, 11))
 
 
@@ -209,7 +214,7 @@ def test_dim_exception_2d():
     def f(x, y):
         return x**2 + y**2
 
-    with pytest.raises(ValueError, match=r"y_range must be specified for a 2D model"):
+    with pytest.raises(ValueError, match=r"y range not specified, but model is 2-d"):
         discretize_model(f, (-10, 11))
 
 
@@ -260,10 +265,3 @@ def test_discretize_oversample():
     assert_allclose(vmax, 0.927, atol=1e-3)
     assert vmax_yx == (25, 5)
     assert_allclose(values_center, values_osf1)
-
-
-def test_oversample_factor():
-    gauss_1D = Gaussian1D(1, 0, 0.1)
-    msg = "factor must have an integer value"
-    with pytest.raises(ValueError, match=msg):
-        discretize_model(gauss_1D, (-1, 2), mode="oversample", factor=1.2)

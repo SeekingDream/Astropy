@@ -4,7 +4,7 @@
 html.py:
   Classes to read and write HTML tables
 
-`BeautifulSoup <https://www.crummy.com/software/BeautifulSoup/>`_
+`BeautifulSoup <http://www.crummy.com/software/BeautifulSoup/>`_
 must be installed to read HTML tables.
 """
 
@@ -12,7 +12,6 @@ import warnings
 from copy import deepcopy
 
 from astropy.table import Column
-from astropy.utils.compat.optional_deps import HAS_BS4
 from astropy.utils.xml import writer
 
 from . import core
@@ -47,6 +46,7 @@ def identify_table(soup, htmldict, numtable):
     Checks whether the given BeautifulSoup tag is the table
     the user intends to process.
     """
+
     if soup is None or soup.name != "table":
         return False  # Tag is not a <table>
 
@@ -76,11 +76,13 @@ class HTMLInputter(core.BaseInputter):
         Convert the given input into a list of SoupString rows
         for further processing.
         """
-        if not HAS_BS4:
+
+        try:
+            from bs4 import BeautifulSoup
+        except ImportError:
             raise core.OptionalTableImportError(
                 "BeautifulSoup must be installed to read HTML tables"
             )
-        from bs4 import BeautifulSoup
 
         if "parser" not in self.html:
             with warnings.catch_warnings():
@@ -106,7 +108,9 @@ class HTMLInputter(core.BaseInputter):
             )
 
         # Get all table rows
-        return [SoupString(x) for x in table.find_all("tr")]
+        soup_list = [SoupString(x) for x in table.find_all("tr")]
+
+        return soup_list
 
 
 class HTMLSplitter(core.BaseSplitter):
@@ -185,6 +189,7 @@ class HTMLHeader(core.BaseHeader):
         """
         Return the line number at which header data begins.
         """
+
         for i, line in enumerate(lines):
             if not isinstance(line, SoupString):
                 raise TypeError("HTML lines should be of type SoupString")
@@ -225,6 +230,7 @@ class HTMLData(core.BaseData):
         """
         Return the line number at which table data begins.
         """
+
         for i, line in enumerate(lines):
             if not isinstance(line, SoupString):
                 raise TypeError("HTML lines should be of type SoupString")
@@ -262,13 +268,6 @@ class HTML(core.BaseReader):
 
     In order to customize input and output, a dict of parameters may
     be passed to this class holding specific customizations.
-
-    .. note::
-       Be aware that in many cases reading tables from published HTML journal articles will not work
-       for a variety of reasons, including inconsistent mark-ups, CAPTCHAs, changing formats,
-       embedded javascript, or the table actually being an image. If possible you should consider
-       retrieving the table in a standard data format such as CSV or FITS, perhaps from an archive
-       such as CDS/Vizier.
 
     **htmldict** : Dictionary of parameters for HTML input/output.
 
@@ -348,6 +347,7 @@ class HTML(core.BaseReader):
         """
         Read the ``table`` in HTML format and return a resulting ``Table``.
         """
+
         self.outputter = HTMLOutputter()
         return super().read(table)
 
@@ -483,7 +483,7 @@ class HTML(core.BaseReader):
 
     def fill_values(self, col, col_str_iters):
         """
-        Return an iterator of the values with replacements based on fill_values.
+        Return an iterator of the values with replacements based on fill_values
         """
         # check if the col is a masked column and has fill values
         is_masked_column = hasattr(col, "mask")

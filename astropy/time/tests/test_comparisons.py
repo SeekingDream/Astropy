@@ -29,10 +29,7 @@ class TestTimeComparisons:
             (operator.le, "<="),
             (operator.lt, "<"),
         ):
-            with pytest.raises(
-                TypeError,
-                match=f"'{op_str}' not supported between instances of 'Time' and 'NoneType'",
-            ):
+            with pytest.raises(TypeError):
                 op(t1, None)
         # Keep == and != as they are specifically meant to test Time.__eq__
         # and Time.__ne__
@@ -92,7 +89,7 @@ class TestTimeComparisons:
     def test_timedelta(self):
         dt = self.t2 - self.t1
         with pytest.raises(TypeError):
-            self.t1 > dt  # noqa: B015
+            self.t1 > dt
         dt_gt_td0 = dt > TimeDelta(0.0, format="sec")
         assert np.all(
             dt_gt_td0

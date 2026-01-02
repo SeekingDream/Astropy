@@ -21,16 +21,16 @@ from astropy.coordinates import (
 )
 
 __all__ = [
-    "CoordinateTransform",
     "CurvedTransform",
-    "Pixel2WorldTransform",
+    "CoordinateTransform",
     "World2PixelTransform",
+    "Pixel2WorldTransform",
 ]
 
 
 class CurvedTransform(Transform, metaclass=abc.ABCMeta):
     """
-    Abstract base class for non-affine curved transforms.
+    Abstract base class for non-affine curved transforms
     """
 
     input_dims = 2
@@ -39,7 +39,7 @@ class CurvedTransform(Transform, metaclass=abc.ABCMeta):
 
     def transform_path(self, path):
         """
-        Transform a Matplotlib Path.
+        Transform a Matplotlib Path
 
         Parameters
         ----------
@@ -65,13 +65,10 @@ class CurvedTransform(Transform, metaclass=abc.ABCMeta):
 class CoordinateTransform(CurvedTransform):
     has_inverse = True
 
-    def __init__(self, input_system, input_units, output_system, output_units):
+    def __init__(self, input_system, output_system):
         super().__init__()
         self._input_system_name = input_system
         self._output_system_name = output_system
-        self._input_units = [u.Unit(unit) for unit in input_units]
-        self._output_units = [u.Unit(unit) for unit in output_units]
-        self.same_units = input_units == output_units
 
         if isinstance(self._input_system_name, str):
             frame_cls = frame_transform_graph.lookup_name(self._input_system_name)
@@ -117,33 +114,26 @@ class CoordinateTransform(CurvedTransform):
 
     def transform(self, input_coords):
         """
-        Transform one set of coordinates to another.
+        Transform one set of coordinates to another
         """
-        if self.same_frames and self.same_units:
+        if self.same_frames:
             return input_coords
 
-        x_in = input_coords[:, 0] * u.Unit(self._input_units[0])
-        y_in = input_coords[:, 1] * u.Unit(self._input_units[1])
+        input_coords = input_coords * u.deg
+        x_in, y_in = input_coords[:, 0], input_coords[:, 1]
 
-        if self.same_frames:
-            lon = x_in
-            lat = y_in
-        else:
-            c_in = SkyCoord(
-                UnitSphericalRepresentation(x_in, y_in), frame=self.input_system
-            )
+        c_in = SkyCoord(
+            UnitSphericalRepresentation(x_in, y_in), frame=self.input_system
+        )
 
-            # We often need to transform arrays that contain NaN values, and filtering
-            # out the NaN values would have a performance hit, so instead we just pass
-            # on all values and just ignore Numpy warnings
-            with np.errstate(all="ignore"):
-                c_out = c_in.transform_to(self.output_system)
+        # We often need to transform arrays that contain NaN values, and filtering
+        # out the NaN values would have a performance hit, so instead we just pass
+        # on all values and just ignore Numpy warnings
+        with np.errstate(all="ignore"):
+            c_out = c_in.transform_to(self.output_system)
 
-            lon = c_out.spherical.lon
-            lat = c_out.spherical.lat
-
-        lon = lon.to_value(self._output_units[0])
-        lat = lat.to_value(self._output_units[1])
+        lon = c_out.spherical.lon.deg
+        lat = c_out.spherical.lat.deg
 
         return np.concatenate((lon[:, np.newaxis], lat[:, np.newaxis]), axis=1)
 
@@ -151,19 +141,14 @@ class CoordinateTransform(CurvedTransform):
 
     def inverted(self):
         """
-        Return the inverse of the transform.
+        Return the inverse of the transform
         """
-        return CoordinateTransform(
-            self._output_system_name,
-            self._output_units,
-            self._input_system_name,
-            self._input_units,
-        )
+        return CoordinateTransform(self._output_system_name, self._input_system_name)
 
 
 class World2PixelTransform(CurvedTransform, metaclass=abc.ABCMeta):
     """
-    Base transformation from world to pixel coordinates.
+    Base transformation from world to pixel coordinates
     """
 
     has_inverse = True
@@ -173,7 +158,7 @@ class World2PixelTransform(CurvedTransform, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def input_dims(self):
         """
-        The number of input world dimensions.
+        The number of input world dimensions
         """
 
     @abc.abstractmethod
@@ -188,13 +173,13 @@ class World2PixelTransform(CurvedTransform, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def inverted(self):
         """
-        Return the inverse of the transform.
+        Return the inverse of the transform
         """
 
 
 class Pixel2WorldTransform(CurvedTransform, metaclass=abc.ABCMeta):
     """
-    Base transformation from pixel to world coordinates.
+    Base transformation from pixel to world coordinates
     """
 
     has_inverse = True
@@ -204,7 +189,7 @@ class Pixel2WorldTransform(CurvedTransform, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def output_dims(self):
         """
-        The number of output world dimensions.
+        The number of output world dimensions
         """
 
     @abc.abstractmethod
@@ -218,5 +203,5 @@ class Pixel2WorldTransform(CurvedTransform, metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def inverted(self):
         """
-        Return the inverse of the transform.
+        Return the inverse of the transform
         """

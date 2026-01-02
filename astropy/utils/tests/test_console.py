@@ -22,6 +22,7 @@ class FakeTTY(io.StringIO):
         if encoding is None:
             return super().__new__(cls)
 
+        encoding = encoding
         cls = type(encoding.title() + cls.__name__, (cls,), {"encoding": encoding})
 
         return cls.__new__(cls)
@@ -122,12 +123,12 @@ def test_spinner_non_unicode_console():
 def test_progress_bar():
     # This stuff is hard to test, at least smoke test it
     with console.ProgressBar(50) as bar:
-        for _ in range(50):
+        for i in range(50):
             bar.update()
 
 
 def test_progress_bar2():
-    for _ in console.ProgressBar(range(50)):
+    for x in console.ProgressBar(range(50)):
         pass
 
 

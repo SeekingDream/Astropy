@@ -1,23 +1,34 @@
-from pathlib import Path
-from threading import Lock
-
 import pytest
 
 from astropy import units as u
-from astropy.config import set_temp_cache
-from astropy.coordinates import EarthLocation, Latitude, Longitude, UnknownSiteException
-from astropy.coordinates.sites import SiteRegistry, get_downloaded_sites
+from astropy.coordinates import EarthLocation, Latitude, Longitude
+from astropy.coordinates.sites import (
+    SiteRegistry,
+    get_builtin_sites,
+    get_downloaded_sites,
+)
 from astropy.tests.helper import assert_quantity_allclose
+from astropy.units import allclose as quantity_allclose
 
-SITE_DATA_LOCK = Lock()
 
+def test_builtin_sites():
+    reg = get_builtin_sites()
 
-@pytest.fixture(scope="function")
-def local_site_data(monkeypatch):
-    with SITE_DATA_LOCK:
-        monkeypatch.setattr(EarthLocation, "_site_registry", None)
-        with set_temp_cache(Path(__file__).with_name("data") / "sites"):
-            yield
+    greenwich = reg["greenwich"]
+    lon, lat, el = greenwich.to_geodetic()
+    assert_quantity_allclose(lon, Longitude("0:0:0", unit=u.deg), atol=10 * u.arcsec)
+    assert_quantity_allclose(lat, Latitude("51:28:40", unit=u.deg), atol=1 * u.arcsec)
+    assert_quantity_allclose(el, 46 * u.m, atol=1 * u.m)
+
+    names = reg.names
+    assert "greenwich" in names
+    assert "example_site" in names
+
+    with pytest.raises(
+        KeyError,
+        match="Site 'nonexistent' not in database. Use the 'names' attribute to see",
+    ):
+        reg["nonexistent"]
 
 
 @pytest.mark.remote_data(source="astropy")
@@ -54,7 +65,9 @@ def test_online_sites():
         reg["kec"]
 
 
-@pytest.mark.usefixtures("local_site_data")
+@pytest.mark.remote_data(source="astropy")
+# this will *try* the online so we have to make it remote_data, even though it
+# could fall back on the non-remote version
 def test_EarthLocation_basic():
     greenwichel = EarthLocation.of_site("greenwich")
     lon, lat, el = greenwichel.to_geodetic()
@@ -72,59 +85,50 @@ def test_EarthLocation_basic():
     ):
         EarthLocation.of_site("nonexistent")
 
-    with pytest.raises(TypeError, match="^site name None is not a 'str'$"):
-        EarthLocation.of_site(None)
+
+def test_EarthLocation_state_offline():
+    EarthLocation._site_registry = None
+    EarthLocation._get_site_registry(force_builtin=True)
+    assert EarthLocation._site_registry is not None
+
+    oldreg = EarthLocation._site_registry
+    newreg = EarthLocation._get_site_registry()
+    assert oldreg is newreg
+    newreg = EarthLocation._get_site_registry(force_builtin=True)
+    assert oldreg is not newreg
 
 
-@pytest.mark.parametrize(
-    "class_method,args",
-    [(EarthLocation.get_site_names, []), (EarthLocation.of_site, ["greenwich"])],
-)
-def test_Earthlocation_refresh_cache_is_mandatory_kwarg(class_method, args):
-    with pytest.raises(
-        TypeError,
-        match=(
-            rf".*{class_method.__name__}\(\) takes [12] positional "
-            "arguments? but [23] were given$"
-        ),
-    ):
-        class_method(*args, False)
+@pytest.mark.remote_data(source="astropy")
+def test_EarthLocation_state_online():
+    EarthLocation._site_registry = None
+    EarthLocation._get_site_registry(force_download=True)
+    assert EarthLocation._site_registry is not None
 
-
-@pytest.mark.xfail(reason="regression test for #18572", raises=AssertionError)
-@pytest.mark.usefixtures("local_site_data")
-def test_Earthlocation_get_site_names_refresh_cache():
-    assert len(EarthLocation.get_site_names()) == 3
-    # Regression test for #18572 - refresh_cache=True had no effect
-    assert len(EarthLocation.get_site_names(refresh_cache=True)) > 3
-
-
-@pytest.mark.usefixtures("local_site_data")
-def test_Earthlocation_of_site_no_refresh_cache():
-    with pytest.raises(UnknownSiteException, match="^Site 'keck' not in database"):
-        EarthLocation.of_site("keck")
-
-
-@pytest.mark.xfail(reason="regression test for #18572", raises=UnknownSiteException)
-@pytest.mark.usefixtures("local_site_data")
-def test_Earthlocation_of_site_refresh_cache():
-    # Regression test for #18572 - refresh_cache=True had no effect
-    keck = EarthLocation.of_site("keck", refresh_cache=True)
-    assert_quantity_allclose(keck.lon, -155.47833333 * u.deg)
+    oldreg = EarthLocation._site_registry
+    newreg = EarthLocation._get_site_registry()
+    assert oldreg is newreg
+    newreg = EarthLocation._get_site_registry(force_download=True)
+    assert oldreg is not newreg
 
 
 def test_registry():
     reg = SiteRegistry()
+
     assert len(reg.names) == 0
 
+    names = ["sitea", "site A"]
     loc = EarthLocation.from_geodetic(lat=1 * u.deg, lon=2 * u.deg, height=3 * u.km)
-    reg.add_site(["sitea", "site A"], loc)
+    reg.add_site(names, loc)
+
     assert len(reg.names) == 2
-    assert reg["SIteA"] is loc
-    assert reg["sIte a"] is loc
+
+    loc1 = reg["SIteA"]
+    assert loc1 is loc
+
+    loc2 = reg["sIte a"]
+    assert loc2 is loc
 
 
-@pytest.mark.usefixtures("local_site_data")
 def test_non_EarthLocation():
     """
     A regression test for a typo bug pointed out at the bottom of
@@ -134,14 +138,67 @@ def test_non_EarthLocation():
     class EarthLocation2(EarthLocation):
         pass
 
+    # This lets keeps us from needing to do remote_data
+    # note that this does *not* mess up the registry for EarthLocation because
+    # registry is cached on a per-class basis
+    EarthLocation2._get_site_registry(force_builtin=True)
+
     el2 = EarthLocation2.of_site("greenwich")
     assert type(el2) is EarthLocation2
     assert el2.info.name == "Royal Observatory Greenwich"
 
 
-@pytest.mark.usefixtures("local_site_data")
+def check_builtin_matches_remote(download_url=True):
+    """
+    This function checks that the builtin sites registry is consistent with the
+    remote registry (or a registry at some other location).
+
+    Note that current this is *not* run by the testing suite (because it
+    doesn't start with "test", and is instead meant to be used as a check
+    before merging changes in astropy-data)
+    """
+    builtin_registry = EarthLocation._get_site_registry(force_builtin=True)
+    dl_registry = EarthLocation._get_site_registry(force_download=download_url)
+
+    in_dl = {}
+    matches = {}
+    for name in builtin_registry.names:
+        in_dl[name] = name in dl_registry
+        if in_dl[name]:
+            matches[name] = quantity_allclose(
+                builtin_registry[name].geocentric, dl_registry[name].geocentric
+            )
+        else:
+            matches[name] = False
+
+    if not all(matches.values()):
+        # this makes sure we actually see which don't match
+        print("In builtin registry but not in download:")
+        for name in in_dl:
+            if not in_dl[name]:
+                print("    ", name)
+        print("In both but not the same value:")
+        for name in matches:
+            if not matches[name] and in_dl[name]:
+                print(
+                    "    ",
+                    name,
+                    "builtin:",
+                    builtin_registry[name],
+                    "download:",
+                    dl_registry[name],
+                )
+        assert False, (
+            "Builtin and download registry aren't consistent - failures printed to"
+            " stdout"
+        )
+
+
 def test_meta_present():
+    reg = get_builtin_sites()
+
+    greenwich = reg["greenwich"]
     assert (
-        EarthLocation.of_site("greenwich").info.meta["source"]
+        greenwich.info.meta["source"]
         == "Ordnance Survey via http://gpsinformation.net/main/greenwich.htm and UNESCO"
     )

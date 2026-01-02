@@ -3719,8 +3719,10 @@ static float quick_select_float(float arr[], int n)
     ELEM_SWAP(arr[low], arr[hh]) ;
 
     /* Re-set active partition */
-    if (hh <= median) low = ll;
-    if (hh >= median) high = hh - 1;
+    if (hh <= median)
+        low = ll;
+        if (hh >= median)
+        high = hh - 1;
     }
 }
 
@@ -3773,8 +3775,10 @@ static short quick_select_short(short arr[], int n)
     ELEM_SWAP(arr[low], arr[hh]) ;
 
     /* Re-set active partition */
-    if (hh <= median) low = ll;
-    if (hh >= median) high = hh - 1;
+    if (hh <= median)
+        low = ll;
+        if (hh >= median)
+        high = hh - 1;
     }
 }
 
@@ -3827,8 +3831,10 @@ static int quick_select_int(int arr[], int n)
     ELEM_SWAP(arr[low], arr[hh]) ;
 
     /* Re-set active partition */
-    if (hh <= median) low = ll;
-    if (hh >= median) high = hh - 1;
+    if (hh <= median)
+        low = ll;
+        if (hh >= median)
+        high = hh - 1;
     }
 }
 
@@ -3881,8 +3887,10 @@ static LONGLONG quick_select_longlong(LONGLONG arr[], int n)
     ELEM_SWAP(arr[low], arr[hh]) ;
 
     /* Re-set active partition */
-    if (hh <= median) low = ll;
-    if (hh >= median) high = hh - 1;
+    if (hh <= median)
+        low = ll;
+        if (hh >= median)
+        high = hh - 1;
     }
 }
 
@@ -3935,8 +3943,10 @@ static double quick_select_double(double arr[], int n)
     ELEM_SWAP(arr[low], arr[hh]) ;
 
     /* Re-set active partition */
-    if (hh <= median) low = ll;
-    if (hh >= median) high = hh - 1;
+    if (hh <= median)
+        low = ll;
+        if (hh >= median)
+        high = hh - 1;
     }
 }
 

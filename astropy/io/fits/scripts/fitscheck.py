@@ -39,6 +39,7 @@ Example uses of fitscheck:
 
 """
 
+
 import argparse
 import logging
 import sys
@@ -69,8 +70,6 @@ def handle_options(args):
     parser = argparse.ArgumentParser(
         description=DESCRIPTION, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    # TODO: pass suggest_on_error as kwarg when PYTHON_LT_14 is dropped
-    parser.suggest_on_error = True
 
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"
@@ -165,46 +164,42 @@ def verify_checksums(filename):
     """
     Prints a message if any HDU in `filename` has a bad checksum or datasum.
     """
-    checksum_errors = 0
-
-    # _verify_checksum_datasum issues warnings when checksums are wrong so we
-    # catch those to avoid duplicates, since we are using logging here to
-    # report problems.
-    with warnings.catch_warnings(record=True):
+    with warnings.catch_warnings(record=True) as wlist:
         warnings.simplefilter("always")
         with fits.open(filename, checksum=OPTIONS.checksum_kind) as hdulist:
             for i, hdu in enumerate(hdulist):
                 # looping on HDUs is needed to read them and verify the
                 # checksums
-                if not OPTIONS.ignore_missing and not hdu._checksum:
-                    checksum_errors += 1
-                    log.warning(
-                        f"MISSING {filename!r} .. Checksum not found in HDU #{i}",
-                    )
-                elif hdu._checksum and not hdu._checksum_valid:
-                    checksum_errors += 1
-                    log.warning(
-                        f"BAD {filename!r} Checksum verification failed for HDU {i}"
-                    )
+                if not OPTIONS.ignore_missing:
+                    if not hdu._checksum:
+                        log.warning(
+                            "MISSING {!r} .. Checksum not found in HDU #{}".format(
+                                filename, i
+                            )
+                        )
+                        return 1
+                    if not hdu._datasum:
+                        log.warning(
+                            "MISSING {!r} .. Datasum not found in HDU #{}".format(
+                                filename, i
+                            )
+                        )
+                        return 1
 
-                if not OPTIONS.ignore_missing and not hdu._datasum:
-                    checksum_errors += 1
-                    log.warning(
-                        f"MISSING {filename!r} .. Datasum not found in HDU #{i}",
-                    )
-                elif hdu._datasum and not hdu._datasum_valid:
-                    checksum_errors += 1
-                    log.warning(
-                        f"BAD {filename!r} Datasum verification failed for HDU {i}"
-                    )
+    for w in wlist:
+        if str(w.message).startswith(
+            ("Checksum verification failed", "Datasum verification failed")
+        ):
+            log.warning("BAD %r %s", filename, str(w.message))
+            return 1
 
-    if not checksum_errors:
-        log.info(f"OK {filename!r}")
-    return checksum_errors
+    log.info(f"OK {filename!r}")
+    return 0
 
 
 def verify_compliance(filename):
     """Check for FITS standard compliance."""
+
     with fits.open(filename) as hdulist:
         try:
             hdulist.verify("exception")
@@ -220,6 +215,7 @@ def update(filename):
 
     Also updates fixes standards violations if possible and requested.
     """
+
     output_verify = "silentfix" if OPTIONS.compliance else "ignore"
 
     # For unit tests we reset temporarily the warning filters. Indeed, before
@@ -243,13 +239,14 @@ def process_file(filename):
     Handle a single .fits file,  returning the count of checksum and compliance
     errors.
     """
+
     try:
         checksum_errors = verify_checksums(filename)
         if OPTIONS.compliance:
             compliance_errors = verify_compliance(filename)
         else:
             compliance_errors = 0
-        if (OPTIONS.write_file and checksum_errors == 0) or OPTIONS.force:
+        if OPTIONS.write_file and checksum_errors == 0 or OPTIONS.force:
             update(filename)
         return checksum_errors + compliance_errors
     except Exception as e:
@@ -262,6 +259,7 @@ def main(args=None):
     Processes command line parameters into options and files,  then checks
     or update FITS DATASUM and CHECKSUM keywords for the specified files.
     """
+
     errors = 0
     fits_files = handle_options(args or sys.argv[1:])
     setup_logging()

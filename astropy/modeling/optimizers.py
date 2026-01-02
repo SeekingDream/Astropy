@@ -5,14 +5,14 @@
 Optimization algorithms used in `~astropy.modeling.fitting`.
 """
 
+import abc
 import warnings
-from abc import ABC, abstractmethod
 
 import numpy as np
 
 from astropy.utils.exceptions import AstropyUserWarning
 
-__all__ = ["SLSQP", "Optimization", "Simplex"]
+__all__ = ["Optimization", "SLSQP", "Simplex"]
 
 # Maximum number of iterations
 DEFAULT_MAXITER = 100
@@ -26,7 +26,7 @@ DEFAULT_ACC = 1e-07
 DEFAULT_BOUNDS = (-(10**12), 10**12)
 
 
-class Optimization(ABC):
+class Optimization(metaclass=abc.ABCMeta):
     """
     Base class for optimizers.
 
@@ -45,10 +45,7 @@ class Optimization(ABC):
 
     supported_constraints = []
 
-    @abstractmethod
-    def __init__(self) -> None: ...
-
-    def _init_opt_method(self, opt_method):
+    def __init__(self, opt_method):
         self._opt_method = opt_method
         self._maxiter = DEFAULT_MAXITER
         self._eps = DEFAULT_EPS
@@ -56,32 +53,32 @@ class Optimization(ABC):
 
     @property
     def maxiter(self):
-        """Maximum number of iterations."""
+        """Maximum number of iterations"""
         return self._maxiter
 
     @maxiter.setter
     def maxiter(self, val):
-        """Set maxiter."""
+        """Set maxiter"""
         self._maxiter = val
 
     @property
     def eps(self):
-        """Step for the forward difference approximation of the Jacobian."""
+        """Step for the forward difference approximation of the Jacobian"""
         return self._eps
 
     @eps.setter
     def eps(self, val):
-        """Set eps value."""
+        """Set eps value"""
         self._eps = val
 
     @property
     def acc(self):
-        """Requested accuracy."""
+        """Requested accuracy"""
         return self._acc
 
     @acc.setter
     def acc(self, val):
-        """Set accuracy."""
+        """Set accuracy"""
         self._acc = val
 
     def __repr__(self):
@@ -93,7 +90,7 @@ class Optimization(ABC):
         """Return the optimization method."""
         return self._opt_method
 
-    @abstractmethod
+    @abc.abstractmethod
     def __call__(self):
         raise NotImplementedError("Subclasses should implement this method")
 
@@ -116,7 +113,7 @@ class SLSQP(Optimization):
     def __init__(self):
         from scipy.optimize import fmin_slsqp
 
-        self._init_opt_method(fmin_slsqp)
+        super().__init__(fmin_slsqp)
         self.fit_info = {
             "final_func_val": None,
             "numiter": None,
@@ -208,7 +205,7 @@ class Simplex(Optimization):
     def __init__(self):
         from scipy.optimize import fmin as simplex
 
-        self._init_opt_method(simplex)
+        super().__init__(simplex)
         self.fit_info = {
             "final_func_val": None,
             "numiter": None,

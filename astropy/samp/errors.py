@@ -3,16 +3,17 @@
 Defines custom errors and exceptions used in `astropy.samp`.
 """
 
+
 import xmlrpc.client as xmlrpc
 
 from astropy.utils.exceptions import AstropyUserWarning
 
-__all__ = ["SAMPClientError", "SAMPHubError", "SAMPProxyError", "SAMPWarning"]
+__all__ = ["SAMPWarning", "SAMPHubError", "SAMPClientError", "SAMPProxyError"]
 
 
 class SAMPWarning(AstropyUserWarning):
     """
-    SAMP-specific Astropy warning class.
+    SAMP-specific Astropy warning class
     """
 
 
@@ -30,11 +31,5 @@ class SAMPClientError(Exception):
 
 class SAMPProxyError(xmlrpc.Fault):
     """
-    SAMP Proxy Hub exception.
-    """
-
-
-class SAMPProxyTimeoutError(SAMPProxyError):
-    """
-    SAMP Proxy Hub timeout exception.
+    SAMP Proxy Hub exception
     """

@@ -42,6 +42,8 @@ More information on using WCSAxes can be found :ref:`here <wcsaxes>`.
                                 category=FITSFixedWarning)
         wcs = WCS(hdu.header)
 
-    fig, ax = plt.subplots(subplot_kw=dict(projection=wcs))
-    ax.imshow(hdu.data, origin='lower', cmap='viridis')
-    ax.set(xlabel='RA', ylabel='Dec')
+    fig = plt.figure()
+    fig.add_subplot(111, projection=wcs)
+    plt.imshow(hdu.data, origin='lower', cmap=plt.cm.viridis)
+    plt.xlabel('RA')
+    plt.ylabel('Dec')

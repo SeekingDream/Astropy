@@ -3,9 +3,9 @@
 """
 This package defines units used in the CDS format, both the units
 defined in `Centre de Données astronomiques de Strasbourg
-<https://cds.unistra.fr/>`_ `Standards for Astronomical Catalogues 2.0
-<https://vizier.unistra.fr/vizier/doc/catstd-3.2.htx>`_ format and the `complete
-set of supported units <https://vizier.unistra.fr/viz-bin/Unit>`_.
+<http://cds.u-strasbg.fr/>`_ `Standards for Astronomical Catalogues 2.0
+<http://vizier.u-strasbg.fr/vizier/doc/catstd-3.2.htx>`_ format and the `complete
+set of supported units <https://vizier.u-strasbg.fr/viz-bin/Unit>`_.
 This format is used by VOTable up to version 1.2.
 
 These units are not available in the top-level `astropy.units`
@@ -20,45 +20,31 @@ To include them in `~astropy.units.UnitBase.compose` and the results of
 
     >>> from astropy.units import cds
     >>> cds.enable()  # doctest: +SKIP
-
-Note, however, that this can introduce conflicts between CDS and other
-units in the top-level namespace. A safer way to use CDS units is to enable
-them inside a context manager. For instance, you could do the following if
-you have a string that uses CDS units:
-
->>> import astropy.units as u
->>> unit_string = "mmHg"
->>> with cds.enable():
-...     pressure_unit = u.Unit(unit_string)
->>> (720*pressure_unit).to(u.bar)
-<Quantity 0.95992119 bar>
 """
-
-__all__ = ["enable"]  #  Units are added at the end
-
-import numpy as np
-
-from astropy.constants import si as _si
-
-from .core import binary_prefixes, def_unit, set_enabled_units, si_prefixes
-from .docgen import generate_dunder_all, generate_unit_summary
 
 _ns = globals()
 
 
 def _initialize_module():
-    # Having `u` in the global namespace would conflict with the atomic mass unit.
-    from astropy import units as u
+    """Initialize CDS units module."""
 
-    prefixes = []
+    # Local imports to avoid polluting top-level namespace
+    import numpy as np
+
+    from astropy import units as u
+    from astropy.constants import si as _si
+
+    from . import core
+
     # The CDS format also supports power-of-2 prefixes as defined here:
     # http://physics.nist.gov/cuu/Units/binary.html
-    for short, _, factor in si_prefixes + binary_prefixes:
-        short = [s for s in short if s.isascii()]
-        prefixes.append((short, short, factor))  # CDS only uses the short prefixes
+    prefixes = core.si_prefixes + core.binary_prefixes
+
+    # CDS only uses the short prefixes
+    prefixes = [(short, short, factor) for (short, long, factor) in prefixes]
 
     # The following units are defined in alphabetical order, directly from
-    # here: https://vizier.unistra.fr/viz-bin/Unit
+    # here: https://vizier.u-strasbg.fr/viz-bin/Unit
 
     mapping = [
         (["A"], u.A, "Ampere"),
@@ -67,7 +53,7 @@ def _initialize_module():
         (["al"], u.lyr, "Light year", ["c", "d"]),
         (["lyr"], u.lyr, "Light year"),
         (["alpha"], _si.alpha, "Fine structure constant"),
-        (["Angstrom", "Å", "Angstroem", "AA"], u.AA, "Angstrom"),
+        ((["AA", "Å"], ["Angstrom", "Angstroem"]), u.AA, "Angstrom"),
         (["arcmin", "arcm"], u.arcminute, "minute of arc"),
         (["arcsec", "arcs"], u.arcsecond, "second of arc"),
         (["atm"], _si.atm, "atmosphere"),
@@ -118,7 +104,7 @@ def _initialize_module():
         (["mmHg"], 133.322387415 * u.Pa, "millimeter of mercury"),
         (["mol"], u.mol, "mole"),
         (["mp"], _si.m_p, "proton mass"),
-        (["solMass", "Msun"], u.solMass, "solar mass"),
+        (["Msun", "solMass"], u.solMass, "solar mass"),
         ((["mu0", "µ0"], []), _si.mu0, "magnetic constant"),
         (["muB"], _si.muB, "Bohr magneton"),
         (["N"], u.N, "Newton"),
@@ -154,7 +140,7 @@ def _initialize_module():
             excludes = []
         else:
             names, unit, doc, excludes = entry
-        def_unit(
+        core.def_unit(
             names,
             unit,
             prefixes=prefixes,
@@ -163,33 +149,33 @@ def _initialize_module():
             exclude_prefixes=excludes,
         )
 
-    def_unit(["µas"], u.microarcsecond, doc="microsecond of arc", namespace=_ns)
-    def_unit(["mas"], u.milliarcsecond, doc="millisecond of arc", namespace=_ns)
-    def_unit(
+    core.def_unit(["µas"], u.microarcsecond, doc="microsecond of arc", namespace=_ns)
+    core.def_unit(["mas"], u.milliarcsecond, doc="millisecond of arc", namespace=_ns)
+    core.def_unit(
         ["---", "-"],
         u.dimensionless_unscaled,
         doc="dimensionless and unscaled",
         namespace=_ns,
     )
-    def_unit(["%"], u.percent, doc="percent", namespace=_ns)
+    core.def_unit(["%"], u.percent, doc="percent", namespace=_ns)
     # The Vizier "standard" defines this in units of "kg s-3", but
     # that may not make a whole lot of sense, so here we just define
     # it as its own new disconnected unit.
-    def_unit(["Crab"], prefixes=prefixes, namespace=_ns, doc="Crab (X-ray) flux")
+    core.def_unit(["Crab"], prefixes=prefixes, namespace=_ns, doc="Crab (X-ray) flux")
 
 
 _initialize_module()
 
 
 ###########################################################################
-# ALL & DOCSTRING
-
-__all__ += generate_dunder_all(globals())  # noqa: PLE0605
+# DOCSTRING
 
 if __doc__ is not None:
     # This generates a docstring for this module that describes all of the
     # standard units defined here.
-    __doc__ += generate_unit_summary(globals())
+    from .utils import generate_unit_summary as _generate_unit_summary
+
+    __doc__ += _generate_unit_summary(globals())
 
 
 def enable():
@@ -203,4 +189,9 @@ def enable():
     This may be used with the ``with`` statement to enable CDS
     units only temporarily.
     """
-    return set_enabled_units(globals())
+    # Local imports to avoid cyclical import and polluting namespace
+    import inspect
+
+    from .core import set_enabled_units
+
+    return set_enabled_units(inspect.getmodule(enable))

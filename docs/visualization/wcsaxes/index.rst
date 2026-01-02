@@ -4,7 +4,7 @@
 Making plots with world coordinates (WCSAxes)
 *********************************************
 
-WCSAxes is a framework for making plots of Astronomical data in |Matplotlib|.
+WCSAxes is a framework for making plots of Astronomical data in `Matplotlib`_.
 It was previously distributed as a standalone package (``wcsaxes``), but is now included in
 :ref:`astropy.visualization <astropy-visualization>`.
 
@@ -32,14 +32,24 @@ package:
     hdu = fits.open(filename)[0]
     wcs = WCS(hdu.header)
 
-    fig, ax = plt.subplots(subplot_kw=dict(projection=wcs))
+    plt.subplot(projection=wcs)
+    plt.imshow(hdu.data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
+    plt.grid(color='white', ls='solid')
+    plt.xlabel('Galactic Longitude')
+    plt.ylabel('Galactic Latitude')
+
+This example uses the :mod:`matplotlib.pyplot` interface to Matplotlib, but WCSAxes
+can be used with any of the other ways of using Matplotlib (some examples of which
+are given in :ref:`initialization`). For example, using the partially object-oriented
+interface, you can do::
+
+    ax = plt.subplot(projection=wcs)
     ax.imshow(hdu.data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
     ax.grid(color='white', ls='solid')
-    ax.set(xlabel='Galactic Longitude', ylabel='Galactic Latitude')
+    ax.set_xlabel('Galactic Longitude')
+    ax.set_ylabel('Galactic Latitude')
 
-The above example uses the partially-object oriented matplotlib interface (keeping
-explicit references to figure and axes objects), as opposed to the pyplot interface.
-Note that this needed to access some of the more advanced functionality
+However, the axes object is needed to access some of the more advanced functionality
 of WCSAxes.  An example of this usage is:
 
 .. plot::
@@ -47,7 +57,7 @@ of WCSAxes.  An example of this usage is:
    :include-source:
    :align: center
 
-    ax = fig.add_subplot(projection=wcs, label='overlays')
+    ax = plt.subplot(projection=wcs, label='overlays')
 
     ax.imshow(hdu.data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
 

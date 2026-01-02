@@ -1,6 +1,6 @@
 /*============================================================================
-  WCSLIB 8.4 - an implementation of the FITS WCS standard.
-  Copyright (C) 1995-2024, Mark Calabretta
+  WCSLIB 7.12 - an implementation of the FITS WCS standard.
+  Copyright (C) 1995-2022, Mark Calabretta
 
   This file is part of WCSLIB.
 
@@ -19,10 +19,10 @@
 
   Author: Mark Calabretta, Australia Telescope National Facility, CSIRO.
   http://www.atnf.csiro.au/people/Mark.Calabretta
-  $Id: spx.h,v 8.4 2024/10/28 13:56:16 mcalabre Exp $
+  $Id: spx.h,v 7.12 2022/09/09 04:57:58 mcalabre Exp $
 *=============================================================================
 *
-* WCSLIB 8.4 - C routines that implement the FITS World Coordinate System
+* WCSLIB 7.12 - C routines that implement the FITS World Coordinate System
 * (WCS) standard.  Refer to the README file provided with WCSLIB for an
 * overview of the library.
 *
@@ -457,7 +457,6 @@
 *
 *   void *padding
 *     (An unused variable inserted for alignment purposes only.)
-*
 *
 * Global variable: const char *spx_errmsg[] - Status return messages
 * ------------------------------------------------------------------

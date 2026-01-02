@@ -112,7 +112,6 @@ Examples creating a WCS programmatically
 
    Example of Imaging WCS <example_create_imaging.rst>
    Example of Cube WCS <example_cube_wcs.rst>
-   Example of a Planetary WCS <creating_planetary_wcs.rst>
    Loading From a FITS File <loading_from_fits.rst>
 
 WCS Tools
@@ -152,7 +151,7 @@ Reference/API
 =============
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    reference_api
 
@@ -166,4 +165,5 @@ See Also
 Acknowledgments and Licenses
 ============================
 
-`wcslib`_ is licenced under the GNU Lesser General Public License.
+`wcslib`_ is licenced under the `GNU Lesser General Public License
+<http://www.gnu.org/licenses/lgpl.html>`_.

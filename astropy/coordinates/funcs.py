@@ -17,7 +17,7 @@ import numpy as np
 from astropy import units as u
 from astropy.constants import c
 from astropy.io import ascii
-from astropy.utils import data, deprecated
+from astropy.utils import data, isiterable
 
 from .builtin_frames import GCRS, PrecessedGeocentric
 from .builtin_frames.utils import get_jd12
@@ -26,11 +26,11 @@ from .sky_coordinate import SkyCoord
 
 __all__ = [
     "cartesian_to_spherical",
-    "concatenate",
-    "concatenate_representations",
-    "get_constellation",
-    "get_sun",
     "spherical_to_cartesian",
+    "get_sun",
+    "get_constellation",
+    "concatenate_representations",
+    "concatenate",
 ]
 
 
@@ -209,7 +209,7 @@ def get_constellation(coord, short_name=False, constellation_list="iau"):
     To determine which constellation a point on the sky is in, this precesses
     to B1875, and then uses the Delporte boundaries of the 88 modern
     constellations, as tabulated by
-    `Roman 1987 <https://cdsarc.cds.unistra.fr/viz-bin/cat/VI/42>`_.
+    `Roman 1987 <http://cdsarc.u-strasbg.fr/viz-bin/Cat?VI/42>`_.
     """
     if constellation_list != "iau":
         raise ValueError("only 'iau' us currently supported for constellation_list")
@@ -280,13 +280,18 @@ def _concatenate_components(reps_difs, names):
     concatenates all of the individual components for an iterable of
     representations or differentials.
     """
-    return [
-        np.concatenate(np.atleast_1d(*[getattr(x, name) for x in reps_difs]))
-        for name in names
-    ]
+    values = []
+    for name in names:
+        unit0 = getattr(reps_difs[0], name).unit
+        # Go via to_value because np.concatenate doesn't work with Quantity
+        data_vals = [getattr(x, name).to_value(unit0) for x in reps_difs]
+        concat_vals = np.concatenate(np.atleast_1d(*data_vals))
+        concat_vals = concat_vals << unit0
+        values.append(concat_vals)
+
+    return values
 
 
-@deprecated("7.2", alternative="np.concatenate", pending=True)
 def concatenate_representations(reps):
     """
     Combine multiple representation objects into a single instance by
@@ -306,19 +311,6 @@ def concatenate_representations(reps):
     rep : `~astropy.coordinates.BaseRepresentation` subclass instance
         A single representation object with its data set to the concatenation of
         all the elements of the input sequence of representations.
-
-    Notes
-    -----
-    As of astropy 7.2, it is possible to combine representations with
-    `numpy.concatenate`, and that is now the recommended way to do it.
-    This function differs from `numpy.concatenate` in that (i) it does not
-    take an axis argument; (ii) scalar representations are allowed to be
-    concatenated with other scalar or one-dimensional ones; (iii) all
-    representations must have the same type and either all have or all not
-    have a differential relative to time, while for `numpy.concatenate`, the
-    output type and the number is forced to be that of the first
-    representation, and differentials on the later representations are ignored
-    if the first one does not have them.
 
     """
     if not isinstance(reps, (Sequence, np.ndarray)):
@@ -362,7 +354,6 @@ def concatenate_representations(reps):
     return new_rep
 
 
-@deprecated("7.2", alternative="np.concatenate", pending=True)
 def concatenate(coords):
     """
     Combine multiple coordinate objects into a single
@@ -383,20 +374,8 @@ def concatenate(coords):
     cskycoord : SkyCoord
         A single sky coordinate with its data set to the concatenation of all
         the elements in ``coords``
-
-    Notes
-    -----
-    As of astropy 7.2, it is possible to combine coordinates with
-    `numpy.concatenate`, and that is now the recommended way to do it.
-    This function differs from `numpy.concatenate` in that (i) it does not
-    take an axis argument; (ii) scalar coordinates are allowed to be
-    concatenated with other scalar or one-dimensional ones; (iii) all
-    |SkyCoord| must have the same representation type and either all have or
-    all not have velocities; and (iv) non-frame attributes are removed
-    instead of copied from the first |SkyCoord|.
-
     """
-    if getattr(coords, "isscalar", False) or not np.iterable(coords):
+    if getattr(coords, "isscalar", False) or not isiterable(coords):
         raise TypeError("The argument to concatenate must be iterable")
 
     scs = [SkyCoord(coord, copy=False) for coord in coords]

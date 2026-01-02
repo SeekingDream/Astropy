@@ -36,7 +36,7 @@ Here is a sample record array::
     >>> bright = np.rec.array([(1,'Sirius', -1.45, 'A1V'),
     ...                        (2,'Canopus', -0.73, 'F0Ib'),
     ...                        (3,'Rigil Kent', -0.1, 'G2V')],
-    ...                       formats='int16,S20,float32,S10',
+    ...                       formats='int16,a20,float32,a10',
     ...                       names='order,name,mag,Sp')
 
 In this example, there are three records (rows) and four fields (columns). The
@@ -46,13 +46,9 @@ the third a floating point number, and the fourth a character string (of length
 
 The underlying data structure used for FITS tables is a class called
 :class:`FITS_rec` which is a specialized subclass of `numpy.recarray`. A
-:class:`FITS_rec` can be instantiated directly from a
-numpy recarray::
-
-    >>> from astropy.io import fits
-    >>> data = fits.FITS_rec(bright)
-
-You may also instantiate a new :class:`FITS_rec` from a list of `astropy.io.fits.Column`
+:class:`FITS_rec` can be instantiated directly using the same initialization
+format presented for plain recarrays as in the example above. You may also
+instantiate a new :class:`FITS_rec` from a list of `astropy.io.fits.Column`
 objects using the :meth:`FITS_rec.from_columns` class method. This has the
 exact same semantics as :meth:`BinTableHDU.from_columns` and
 :meth:`TableHDU.from_columns`, except that it only returns an actual FITS_rec
@@ -81,13 +77,6 @@ table.
 
 Example
 ^^^^^^^
-
-.. note::
-
-    The ``astropy.io.fits.util.get_testdata_filepath()`` function,
-    used in the examples here, returns file path for test data shipped with ``astropy``.
-    To work with your own data instead, please use :func:`astropy.io.fits.open` or :ref:`io-fits-intro-convenience-functions`,
-    which take either the relative or absolute path as string or :term:`python:path-like object`.
 
 ..
   EXAMPLE START
@@ -310,7 +299,7 @@ name and format. Here is a summary of all allowed formats for a binary table:
 
 We will concentrate on binary tables in this chapter. ASCII tables will be
 discussed in a later chapter. The less frequently used X format (bit array) and
-P format (used in :ref:`variable_length_array_tables`) will also be discussed in a later
+P format (used in variable length tables) will also be discussed in a later
 chapter.
 
 Besides the required name and format arguments in constructing a

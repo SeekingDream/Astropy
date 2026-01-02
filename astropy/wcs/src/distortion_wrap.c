@@ -17,7 +17,6 @@ PyDistLookup_traverse(
     void* arg) {
 
   Py_VISIT(self->py_data);
-  Py_VISIT((PyObject*)Py_TYPE((PyObject*)self));
 
   return 0;
 }
@@ -37,11 +36,8 @@ PyDistLookup_dealloc(
 
   PyObject_GC_UnTrack(self);
   distortion_lookup_t_free(&self->x);
-  Py_XDECREF((PyObject*)self->py_data);
-  PyTypeObject *tp = Py_TYPE((PyObject*)self);
-  freefunc free_func = PyType_GetSlot(tp, Py_tp_free);
-  free_func((PyObject*)self);
-  Py_DECREF(tp);
+  Py_XDECREF(self->py_data);
+  Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 /*@null@*/ static PyObject *
@@ -52,8 +48,7 @@ PyDistLookup_new(
 
   PyDistLookup* self;
 
-  allocfunc alloc_func = PyType_GetSlot(type, Py_tp_alloc);
-  self = (PyDistLookup*)alloc_func(type, 0);
+  self = (PyDistLookup*)type->tp_alloc(type, 0);
   if (self != NULL) {
     if (distortion_lookup_t_init(&self->x)) {
       return NULL;
@@ -165,7 +160,7 @@ PyDistLookup_get_data(
     Py_INCREF(Py_None);
     return Py_None;
   } else {
-    Py_INCREF((PyObject*)self->py_data);
+    Py_INCREF(self->py_data);
     return (PyObject*)self->py_data;
   }
 }
@@ -190,7 +185,7 @@ PyDistLookup_set_data(
     return -1;
   }
 
-  Py_XDECREF((PyObject*)self->py_data);
+  Py_XDECREF(self->py_data);
 
   self->py_data = value_array;
   self->x.naxis[0] = (unsigned int)PyArray_DIM(value_array, 1);
@@ -232,7 +227,7 @@ PyDistLookup___copy__(
   PyDistLookup* copy = NULL;
   int           i    = 0;
 
-  copy = (PyDistLookup*)PyDistLookup_new((PyTypeObject*)PyDistLookupType, NULL, NULL);
+  copy = (PyDistLookup*)PyDistLookup_new(&PyDistLookupType, NULL, NULL);
   if (copy == NULL) {
     return NULL;
   }
@@ -261,7 +256,7 @@ PyDistLookup___deepcopy__(
   PyObject*     obj_copy;
   int           i = 0;
 
-  copy = (PyDistLookup*)PyDistLookup_new((PyTypeObject*)PyDistLookupType, NULL, NULL);
+  copy = (PyDistLookup*)PyDistLookup_new(&PyDistLookupType, NULL, NULL);
   if (copy == NULL) {
     return NULL;
   }
@@ -302,33 +297,54 @@ static PyMethodDef PyDistLookup_methods[] = {
   {NULL}
 };
 
-static PyType_Spec PyDistLookupType_spec = {
-  .name = "astropy.wcs.DistortionLookupTable",
-  .basicsize = sizeof(PyDistLookup),
-  .itemsize = 0,
-  .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_IMMUTABLETYPE,
-  .slots = (PyType_Slot[]){
-    {Py_tp_dealloc, (destructor)PyDistLookup_dealloc},
-    {Py_tp_doc, doc_DistortionLookupTable},
-    {Py_tp_traverse, (traverseproc)PyDistLookup_traverse},
-    {Py_tp_clear, (inquiry)PyDistLookup_clear},
-    {Py_tp_methods, PyDistLookup_methods},
-    {Py_tp_getset, PyDistLookup_getset},
-    {Py_tp_init, (initproc)PyDistLookup_init},
-    {Py_tp_new, PyDistLookup_new},
-    {0, NULL},
-  },
+PyTypeObject PyDistLookupType = {
+  PyVarObject_HEAD_INIT(NULL, 0)
+  "astropy.wcs.DistortionLookupTable",  /*tp_name*/
+  sizeof(PyDistLookup),         /*tp_basicsize*/
+  0,                            /*tp_itemsize*/
+  (destructor)PyDistLookup_dealloc, /*tp_dealloc*/
+  0,                            /*tp_print*/
+  0,                            /*tp_getattr*/
+  0,                            /*tp_setattr*/
+  0,                            /*tp_compare*/
+  0,                            /*tp_repr*/
+  0,                            /*tp_as_number*/
+  0,                            /*tp_as_sequence*/
+  0,                            /*tp_as_mapping*/
+  0,                            /*tp_hash */
+  0,                            /*tp_call*/
+  0,                            /*tp_str*/
+  0,                            /*tp_getattro*/
+  0,                            /*tp_setattro*/
+  0,                            /*tp_as_buffer*/
+  Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC, /*tp_flags*/
+  doc_DistortionLookupTable,    /* tp_doc */
+  (traverseproc)PyDistLookup_traverse, /* tp_traverse */
+  (inquiry)PyDistLookup_clear,  /* tp_clear */
+  0,                            /* tp_richcompare */
+  0,                            /* tp_weaklistoffset */
+  0,                            /* tp_iter */
+  0,                            /* tp_iternext */
+  PyDistLookup_methods,         /* tp_methods */
+  0,                            /* tp_members */
+  PyDistLookup_getset,          /* tp_getset */
+  0,                            /* tp_base */
+  0,                            /* tp_dict */
+  0,                            /* tp_descr_get */
+  0,                            /* tp_descr_set */
+  0,                            /* tp_dictoffset */
+  (initproc)PyDistLookup_init,  /* tp_init */
+  0,                            /* tp_alloc */
+  PyDistLookup_new,             /* tp_new */
 };
-
-PyObject* PyDistLookupType = NULL;
 
 int _setup_distortion_type(
     PyObject* m) {
 
-  PyDistLookupType = PyType_FromSpec(&PyDistLookupType_spec);
-  if (PyDistLookupType == NULL) {
+  if (PyType_Ready(&PyDistLookupType) < 0) {
     return -1;
   }
 
-  return PyModule_AddObject(m, "DistortionLookupTable", PyDistLookupType);
+  Py_INCREF(&PyDistLookupType);
+  return PyModule_AddObject(m, "DistortionLookupTable", (PyObject *)&PyDistLookupType);
 }

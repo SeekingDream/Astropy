@@ -45,7 +45,7 @@ Or a `numpy.ndarray`::
                [0.11111111, 0.2       , 0.27272727, 0.33333333]])
 
 Here, broadcasting takes care of the different dimensions. Several other
-types of operands are also accepted.
+classes are also possible.
 
 Using Arithmetic Classmethods
 =============================
@@ -103,7 +103,7 @@ Adding two `~astropy.nddata.NDData` objects with the same unit works::
 
     >>> ndd = ndd1.add(ndd2)
     >>> ndd.data  # doctest: +FLOAT_CMP
-    array([101., 152., 203., 54., 505.])
+    array([101., 152., 203.,  54., 505.])
     >>> ndd.unit
     Unit("m")
 
@@ -126,7 +126,7 @@ not be decomposed during division::
 
     >>> ndd = ndd2.divide(ndd1)
     >>> ndd.data  # doctest: +FLOAT_CMP
-    array([100. , 75. , 66.66666667, 12.5 , 100. ])
+    array([100.        ,  75.        ,  66.66666667,  12.5       , 100.        ])
     >>> ndd.unit
     Unit("lyr / pc")
 

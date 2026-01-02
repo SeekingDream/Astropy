@@ -3,7 +3,7 @@ import subprocess
 import os
 import json
 
-REPO_DIR = "./AgentTestRepo"
+REPO_DIR = "./"
 TRAJ_PATH = "./traj.json"
 PATCH_PATH = "./fix.patch"
 

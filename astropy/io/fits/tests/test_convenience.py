@@ -56,10 +56,8 @@ class TestConvenience(FitsTestCase):
         with pytest.warns(
             u.UnitsWarning, match="'not-a-unit' did not parse as fits unit"
         ) as w:
-            hdu = fits.table_to_hdu(table, name="MYTABLE")
-
+            hdu = fits.table_to_hdu(table)
         assert len(w) == 1
-        assert hdu.header["EXTNAME"] == "MYTABLE"
 
         # Check that TUNITn cards appear in the correct order
         # (https://github.com/astropy/astropy/pull/5720)
@@ -67,9 +65,7 @@ class TestConvenience(FitsTestCase):
 
         assert isinstance(hdu, fits.BinTableHDU)
         filename = self.temp("test_table_to_hdu.fits")
-        hdu.writeto(filename)
-
-        assert fits.getval(filename, "EXTNAME", ext=1) == "MYTABLE"
+        hdu.writeto(filename, overwrite=True)
 
     def test_masked_table_to_hdu(self):
         i = np.ma.MaskedArray([1, 2, 3], mask=[True, False, False])
@@ -295,6 +291,7 @@ class TestConvenience(FitsTestCase):
         # Test HDU object inputs
         with fits.open(self.data("stddata.fits"), mode="readonly") as in1:
             with fits.open(self.data("checksum.fits"), mode="readonly") as in2:
+
                 assert printdiff(in1[0], in2[0]) is None
 
                 with pytest.raises(ValueError):

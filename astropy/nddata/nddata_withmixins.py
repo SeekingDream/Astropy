@@ -4,6 +4,7 @@
 This module implements a class based on NDData with all Mixins.
 """
 
+
 from .mixins.ndarithmetic import NDArithmeticMixin
 from .mixins.ndio import NDIOMixin
 from .mixins.ndslicing import NDSlicingMixin
@@ -24,7 +25,7 @@ class NDDataRef(NDArithmeticMixin, NDIOMixin, NDSlicingMixin, NDData):
     A key distinction from `NDDataArray` is that this class does not attempt
     to provide anything that was not defined in any of the parent classes.
 
-    See Also
+    See also
     --------
     NDData
     NDArithmeticMixin
@@ -67,3 +68,5 @@ class NDDataRef(NDArithmeticMixin, NDIOMixin, NDSlicingMixin, NDData):
     See `NDSlicingMixin` for a description how slicing works (which attributes)
     are sliced.
     """
+
+    pass

@@ -67,11 +67,12 @@ calculating values based on input x values, and using fitting data with a model.
        fitted_line = fit(line_init, x, y)
 
        # plot the model
-       fig, ax = plt.subplots()
-       ax.plot(x, y, 'ko', label='Data')
-       ax.plot(x, fitted_line(x), 'k-', label='Fitted Model')
-       ax.set(xlabel='x', ylabel='y')
-       ax.legend()
+       plt.figure()
+       plt.plot(x, y, 'ko', label='Data')
+       plt.plot(x, fitted_line(x), 'k-', label='Fitted Model')
+       plt.xlabel('x')
+       plt.ylabel('y')
+       plt.legend()
 
 .. _advanced_topics:
 
@@ -86,7 +87,6 @@ Advanced Topics
    Extending Fitters <new-fitter.rst>
    Adding support for units to models <add-units.rst>
    Joint Fitting <jointfitter.rst>
-   Parallel Fitting <parallel-fitting.rst>
 
 
 Pre-Defined Models
@@ -133,6 +133,6 @@ Reference/API
 =============
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
    reference_api

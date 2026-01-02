@@ -1,14 +1,13 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-import erfa
-
+from astropy.coordinates import earth_orientation as earth
 from astropy.coordinates.attributes import TimeAttribute
 from astropy.coordinates.baseframe import base_doc, frame_transform_graph
 from astropy.coordinates.transformations import DynamicMatrixTransform
 from astropy.utils.decorators import format_doc
 
 from .baseradec import BaseRADecFrame, doc_components
-from .utils import EQUINOX_J2000, get_jd12
+from .utils import EQUINOX_J2000
 
 __all__ = ["FK5"]
 
@@ -32,7 +31,7 @@ class FK5(BaseRADecFrame):
     The frame attributes are listed under **Other Parameters**.
     """
 
-    equinox = TimeAttribute(default=EQUINOX_J2000, doc="The equinox time")
+    equinox = TimeAttribute(default=EQUINOX_J2000)
 
     @staticmethod
     def _precession_matrix(oldequinox, newequinox):
@@ -51,15 +50,8 @@ class FK5(BaseRADecFrame):
         -------
         newcoord : array
             The precession matrix to transform to the new equinox
-
-        References
-        ----------
-        Hilton, J. et al., 2006, Celest.Mech.Dyn.Astron. 94, 351
         """
-        # Multiply the two precession matrices (without frame bias) through J2000.0
-        fromepoch_to_J2000 = erfa.bp06(*get_jd12(oldequinox, "tt"))[1].swapaxes(-2, -1)
-        J2000_to_toepoch = erfa.bp06(*get_jd12(newequinox, "tt"))[1]
-        return J2000_to_toepoch @ fromepoch_to_J2000
+        return earth.precession_matrix_Capitaine(oldequinox, newequinox)
 
 
 # This is the "self-transform".  Defined at module level because the decorator

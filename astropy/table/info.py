@@ -1,18 +1,18 @@
 """
 Table property for providing information about table.
 """
-
 import os
 
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 import sys
 from contextlib import contextmanager
+from inspect import isclass
 
 import numpy as np
 
 from astropy.utils.data_info import DataInfo
 
-__all__ = ["TableInfo", "serialize_method_as", "table_info"]
+__all__ = ["table_info", "TableInfo", "serialize_method_as"]
 
 
 def table_info(tbl, option="attributes", out=""):
@@ -132,7 +132,7 @@ def serialize_method_as(tbl, serialize_method):
     attribute is an optional dict which might look like ``{'fits':
     'jd1_jd2', 'ecsv': 'formatted_value', ..}``.
 
-    ``serialize_method`` is a str or dict.  If str then it the value
+    ``serialize_method`` is a str or dict.  If str then it the the value
     is the ``serialize_method`` that will be used for all formats.
     If dict then the key values can be either:
 
@@ -172,7 +172,7 @@ def serialize_method_as(tbl, serialize_method):
 
         # Otherwise look for subclass matches
         for key in serialize_method:
-            if isinstance(key, type) and isinstance(col, key):
+            if isclass(key) and isinstance(col, key):
                 return serialize_method[key]
 
         return None
@@ -202,9 +202,9 @@ def serialize_method_as(tbl, serialize_method):
                     # is not actually known (this gets determined by the write function
                     # in registry.py).  Note this creates a new temporary dict object
                     # so that the restored version is the same original object.
-                    col.info.serialize_method = dict.fromkeys(
-                        col.info.serialize_method, override_sm
-                    )
+                    col.info.serialize_method = {
+                        fmt: override_sm for fmt in col.info.serialize_method
+                    }
 
     # Finally yield for the context block
     try:

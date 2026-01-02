@@ -299,6 +299,7 @@ class SAMPIntegratedClient:
         ...                   txt = "initialization", percent = "10",
         ...                   extra_kws = {"my.extra.info": "just an example"})
         """
+
         return self.call(recipient_id, msg_tag, self._format_easy_msg(mtype, params))
 
     def call_all(self, msg_tag, message):
@@ -429,7 +430,7 @@ class SAMPIntegratedClient:
         >>> from astropy.samp import SAMPIntegratedClient, SAMP_STATUS_ERROR
         >>> cli = SAMPIntegratedClient()
         >>> ...
-        >>> cli.ereply("message_id", SAMP_STATUS_ERROR, result={},
+        >>> cli.ereply("abd", SAMP_STATUS_ERROR, result={},
         ...            error={"samp.errortxt": "Test error message"})
         """
         return self.reply(msg_id, self._format_easy_response(status, result, error))

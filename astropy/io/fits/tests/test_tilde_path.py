@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from astropy.io import fits
-from astropy.io.fits.scripts import fitsheader
 from astropy.utils.misc import _NOT_OVERWRITING_MSG_MATCH
 
 from .conftest import FitsTestCase
@@ -55,6 +54,8 @@ class TestTildePaths(FitsTestCase):
             fits.getval(filename, "missing")
 
     def test_header_formatter(self, home_is_data):
+        from astropy.io.fits.scripts import fitsheader
+
         hf = fitsheader.HeaderFormatter(self.data("zerowidth.fits"))
         hf.close()
 
@@ -68,7 +69,7 @@ class TestTildePaths(FitsTestCase):
                 (2, "Canopys", -0.73, "F0Ib"),
                 (3, "Rigil Kent", -0.1, "G2V"),
             ],
-            formats="int16,S20,float32,S10",
+            formats="int16,a20,float32,a10",
             names="order,name,mag,Sp",
         )
         hdu = fits.BinTableHDU(bright)
@@ -105,7 +106,7 @@ class TestTildePaths(FitsTestCase):
                 (2, "Canopys", -0.73, "F0Ib"),
                 (3, "Rigil Kent", -0.1, "G2V"),
             ],
-            formats="int16,S20,float32,S10",
+            formats="int16,a20,float32,a10",
             names="order,name,mag,Sp",
         )
         hdu = fits.BinTableHDU(bright)
@@ -122,7 +123,7 @@ class TestTildePaths(FitsTestCase):
                 (2, "Canopys", -0.73, "F0Ib"),
                 (3, "Rigil Kent", -0.1, "G2V"),
             ],
-            formats="int16,S20,float32,S10",
+            formats="int16,a20,float32,a10",
             names="order,name,mag,Sp",
         )
         hdu = fits.TableHDU.from_columns(bright, nrows=2)

@@ -1,40 +1,16 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-import warnings
+
 from collections import defaultdict
 
 import numpy as np
 from matplotlib import rcParams
-from matplotlib.artist import allow_rasterization
 from matplotlib.text import Text
-
-from astropy.utils.decorators import deprecated_renamed_argument
-from astropy.utils.exceptions import AstropyDeprecationWarning
 
 from .frame import RectangularFrame
 
 
 def sort_using(X, Y):
     return [x for (y, x) in sorted(zip(Y, X))]
-
-
-def _find_start_of_last_number(label):
-    """
-    Given a label, find the index of the start of the last numerical value
-    in the label.
-    """
-    numerical_chars = "0123456789.+"
-    if rcParams["axes.unicode_minus"] and not rcParams["text.usetex"]:
-        numerical_chars += "\N{MINUS SIGN}"
-    else:
-        numerical_chars += "-"
-
-    in_number = False
-    for j in range(len(label) - 1, -1, -1):
-        if in_number:
-            if label[j] not in numerical_chars:
-                return j + 1
-        elif label[j] in numerical_chars:
-            in_number = True
 
 
 class TickLabels(Text):
@@ -46,16 +22,13 @@ class TickLabels(Text):
         self.set_visible_axes("all")
         self.set_pad(rcParams["xtick.major.pad"])
         self._exclude_overlapping = False
-        self._simplify = True
-
-        # Mapping from axis > list[bounding boxes]
-        self._axis_bboxes = defaultdict(list)
 
         # Stale if either xy positions haven't been calculated, or if
         # something changes that requires recomputing the positions
         self._stale = True
 
         # Check rcParams
+
         if "color" not in kwargs:
             self.set_color(rcParams["xtick.color"])
 
@@ -146,35 +119,32 @@ class TickLabels(Text):
         Figure out which parts of labels can be dropped to avoid repetition.
         """
         self.sort()
-
         for axis in self.world:
             t1 = self.text[axis][0]
             for i in range(1, len(self.world[axis])):
                 t2 = self.text[axis][i]
-
-                if t1 == t2:
-                    # In this case, we still need to preserve the last segment
-                    # of the label. We search backwards from the end, and
-                    # search for a number, and we then search for the first
-                    # non-number (and non-decimal place) character we can find.
-                    start = _find_start_of_last_number(t2)
-                else:
-                    for j in range(len(t1)):
-                        if t1[j] != t2[j]:
-                            start = _find_start_of_last_number(t2[: j + 1])
-                            break
-
+                if len(t1) != len(t2):
+                    t1 = self.text[axis][i]
+                    continue
+                start = 0
+                # In the following loop, we need to ignore the last character,
+                # hence the len(t1) - 1. This is because if we have two strings
+                # like 13d14m15s we want to make sure that we keep the last
+                # part (15s) even if the two labels are identical.
+                for j in range(len(t1) - 1):
+                    if t1[j] != t2[j]:
+                        break
+                    if t1[j] not in "-0123456789.":
+                        start = j + 1
+                t1 = self.text[axis][i]
                 if start != 0:
-                    starts_dollar = t2.startswith("$")
-                    self.text[axis][i] = t2[start:]
+                    starts_dollar = self.text[axis][i].startswith("$")
+                    self.text[axis][i] = self.text[axis][i][start:]
                     if starts_dollar:
                         self.text[axis][i] = "$" + self.text[axis][i]
-
                 # Remove any empty LaTeX inline math mode string
                 if self.text[axis][i] == "$$":
                     self.text[axis][i] = ""
-
-                t1 = t2
 
         self._stale = True
 
@@ -186,22 +156,19 @@ class TickLabels(Text):
         return self._pad
 
     def set_visible_axes(self, visible_axes):
-        self._visible_axes = self._frame._validate_positions(visible_axes)
+        self._visible_axes = visible_axes
         self._stale = True
 
     def get_visible_axes(self):
         if self._visible_axes == "all":
-            return list(self._frame.keys())
+            return self.world.keys()
         else:
-            return [x for x in self._visible_axes if x in self._frame or x == "#"]
+            return [x for x in self._visible_axes if x in self.world]
 
     def set_exclude_overlapping(self, exclude_overlapping):
         self._exclude_overlapping = exclude_overlapping
 
-    def set_simplify(self, simplify):
-        self._simplify = simplify
-
-    def _set_xy_alignments(self, renderer):
+    def _set_xy_alignments(self, renderer, tick_out_size):
         """
         Compute and set the x, y positions and the horizontal/vertical alignment of
         each label.
@@ -209,8 +176,7 @@ class TickLabels(Text):
         if not self._stale:
             return
 
-        if self._simplify:
-            self.simplify_labels()
+        self.simplify_labels()
         text_size = renderer.points_to_pixels(self.get_size())
 
         visible_axes = self.get_visible_axes()
@@ -227,7 +193,7 @@ class TickLabels(Text):
                     continue
 
                 x, y = self._frame.parent_axes.transData.transform(self.data[axis][i])
-                pad = renderer.points_to_pixels(self.get_pad() + self._tick_out_size)
+                pad = renderer.points_to_pixels(self.get_pad() + tick_out_size)
 
                 if isinstance(self._frame, RectangularFrame):
                     # This is just to preserve the current results, but can be
@@ -329,34 +295,13 @@ class TickLabels(Text):
         self.set_va(self.va[axis][i])
         return super().get_window_extent(renderer)
 
-    @property
-    def _all_bboxes(self):
-        # List of all tick label bounding boxes
-        ret = []
-        for axis in self._axis_bboxes:
-            ret += self._axis_bboxes[axis]
-        return ret
-
-    def _set_existing_bboxes(self, bboxes):
-        self._existing_bboxes = bboxes
-
-    @allow_rasterization
-    @deprecated_renamed_argument(old_name="bboxes", new_name=None, since="6.0")
-    @deprecated_renamed_argument(old_name="ticklabels_bbox", new_name=None, since="6.0")
-    @deprecated_renamed_argument(old_name="tick_out_size", new_name=None, since="6.0")
-    def draw(self, renderer, bboxes=None, ticklabels_bbox=None, tick_out_size=None):
-        # Reset bounding boxes
-        self._axis_bboxes = defaultdict(list)
-
+    def draw(self, renderer, bboxes, ticklabels_bbox, tick_out_size):
         if not self.get_visible():
             return
 
-        self._set_xy_alignments(renderer)
+        self._set_xy_alignments(renderer, tick_out_size)
 
         for axis in self.get_visible_axes():
-            if axis == "#":
-                continue
-
             for i in range(len(self.world[axis])):
                 # This implicitly sets the label text, position, alignment
                 bb = self._get_bb(axis, i, renderer)
@@ -366,9 +311,8 @@ class TickLabels(Text):
                 # TODO: the problem here is that we might get rid of a label
                 # that has a key starting bit such as -0:30 where the -0
                 # might be dropped from all other labels.
-                if (
-                    not self._exclude_overlapping
-                    or bb.count_overlaps(self._all_bboxes + self._existing_bboxes) == 0
-                ):
+
+                if not self._exclude_overlapping or bb.count_overlaps(bboxes) == 0:
                     super().draw(renderer)
-                    self._axis_bboxes[axis].append(bb)
+                    bboxes.append(bb)
+                    ticklabels_bbox[axis].append(bb)

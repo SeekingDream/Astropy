@@ -3,12 +3,12 @@
 #-----------------------------------------------------------------------------
 # Author: Mark Calabretta, Australia Telescope National Facility, CSIRO.
 # http://www.atnf.csiro.au/people/Mark.Calabretta
-# $Id: configure.ac,v 8.4 2024/10/28 13:56:17 mcalabre Exp $
+# $Id: configure.ac,v 7.12 2022/09/09 04:57:58 mcalabre Exp $
 #-----------------------------------------------------------------------------
 
-AC_INIT([WCSLIB],[8.4],[mark@calabretta.id.au],[wcslib-8.4])
-AC_PREREQ([2.71])
-AC_REVISION([$Revision: 8.4 $])
+AC_INIT([WCSLIB], [7.12], [mark@calabretta.id.au], [wcslib-7.12])
+AC_PREREQ([2.53])
+AC_REVISION([$Revision: 7.12 $])
 AC_SUBST([PACKAGE_VERSION])
 AC_DEFINE_UNQUOTED([WCSLIB_VERSION], [$PACKAGE_VERSION], [Define wcslib version])
 
@@ -57,15 +57,7 @@ fi
 # Look for an ANSI C compiler.
 AC_PROG_CPP
 AC_PROG_CC
-if test "x$ac_cv_c_compiler_gnu" = xyes ; then
-  # Get gcc version number.
-  GCC_VERSION=`$CC -dumpfullversion`
-  AC_MSG_NOTICE([Using gcc version $GCC_VERSION])
-else
-  GCC_VERSION=
-fi
-AC_SUBST([GCC_VERSION])
-
+AC_PROG_CC_STDC
 AC_C_CONST
 AC_TYPE_SIZE_T
 if test "x$ac_cv_prog_cc_stdc" = xno -o \
@@ -79,21 +71,25 @@ if test "x$ac_cv_prog_cc_stdc" = xno -o \
     -------------------------------------------------------], [1])
 fi
 
-# Data types used in wcs.c (results not currently used).
+# Check for data types (suggested by autoscan - off_t is only required by
+# fitshdr).
+AC_TYPE_OFF_T
+AC_TYPE_INT8_T
+AC_TYPE_INT16_T
+AC_TYPE_INT32_T
+AC_TYPE_UINT8_T
 AC_TYPE_UINT16_T
 AC_TYPE_UINT32_T
 
-# Check for standard C header files required to compile the library.
-headers=
-AC_CHECK_HEADERS([ctype.h inttypes.h limits.h locale.h math.h setjmp.h
-                  stdarg.h stddef.h stdint.h stdio.h stdlib.h string.h],
-                  [], [headers=no])
-if test "x$headers" = xno; then
+# Check for ANSI C headers.
+AC_HEADER_STDC
+AC_CHECK_HEADERS([ctype.h errno.h limits.h locale.h math.h setjmp.h stdarg.h \
+                  stdio.h stdlib.h string.h])
+if test "x$ac_cv_header_stdc" = xno; then
   AC_MSG_ERROR([
     -------------------------------------------------------------------
     An ANSI standard C library is required to build WCSLIB.  One of the
-    standard C header files it requires is missing or unusable.  Please
-    refer to the above log.
+    ANSI C header files it requires is missing or unusable.
 
     ERROR: WCSLIB configuration failure.
     -------------------------------------------------------------------], [1])
@@ -109,8 +105,16 @@ if test "x$ac_cv_c_compiler_gnu" = xyes ; then
 fi
 AC_SUBST([FLFLAGS])
 
-# Check for libm.
+# Checks for ANSI C library functions (suggested by autoscan - fseeko and
+# stat are only required by fitshdr).
 AC_CHECK_LIB([m], [floor])
+AC_FUNC_FSEEKO
+AC_FUNC_MALLOC
+AC_FUNC_REALLOC
+AC_FUNC_SETVBUF_REVERSED
+AC_FUNC_STAT
+AC_FUNC_VPRINTF
+AC_CHECK_FUNCS([floor memset pow setlocale sqrt strchr strstr])
 
 # System libraries that may be required by WCSLIB itself.
 # SunOS, extra maths functions.
@@ -246,22 +250,6 @@ else
     # F77 name mangling (defines the F77_FUNC preprocessor macro).
     AC_F77_WRAPPERS
 
-    if test "x$BINDC" = x ; then
-      AC_ARG_WITH([bindc], [AS_HELP_STRING([--with-bindc],
-              [use Fortran 2003 BIND(C) wrappers - recommended for Link Time
-               Optimization (LTO)])], [])
-      if test "x$with_bindc" = xyes ; then
-        BINDC=yes
-      fi
-    fi
-
-    if test "x$BINDC" = xyes ; then
-      AC_MSG_NOTICE([using Fortran 2003 BIND(C) wrappers.])
-    else
-      BINDC=
-    fi
-    AC_SUBST([BINDC])
-
     SUBDIRS="C Fortran"
     TSTDIRS="C Fortran"
     INSTDIR="Fortran"
@@ -366,24 +354,13 @@ AC_MSG_NOTICE([End of primary configuration.
 # ----------------------------------------------------------------
 AC_MSG_NOTICE([Looking for libraries etc. for utilities and test suite...])
 
-# Additional standard C header files required.
-headers=
-AC_CHECK_HEADERS([errno.h time.h], [], [headers=no])
+# Check for other quasi-standard header files.
+AC_CHECK_HEADERS([unistd.h])
 
-# Other header files required by *nix library functions.
-AC_CHECK_HEADERS([sys/stat.h sys/types.h unistd.h], [], [headers=no])
-if test "x$headers" = xno; then
-  AC_MSG_WARN([
-    --------------------------------------------------------------------
-    One or more of the header files required to compile the utilities
-    and/or test programs is missing.  Continuing on a best-effort basis.
-    --------------------------------------------------------------------])
-fi
-
-# Large file support (only required by fitshdr utility).
+# Large file support.
 AC_FUNC_FSEEKO
 AC_SYS_LARGEFILE
-AC_TYPE_OFF_T
+
 
 # Extra places to look for third-party libraries and header files.
 LIBDIRS=
@@ -490,10 +467,6 @@ if test "x$with_cfitsio" != xno -o \
                         getwcstab.c to compile test programs.])
       fi
     fi
-
-    AC_SUBST([CFITSIOINC])
-    AC_SUBST([CFITSIOLIB])
-    AC_SUBST([GETWCSTAB])
   fi
 
   # PGPLOT.
@@ -570,9 +543,6 @@ if test "x$with_cfitsio" != xno -o \
       TSTDIRS="$TSTDIRS pgsbox"
     fi
   fi
-
-  AC_SUBST([PGPLOTINC])
-  AC_SUBST([PGPLOTLIB])
 fi
 
 
@@ -589,11 +559,6 @@ else
   INSTDIR="$INSTDIR utils"
 fi
 
-AC_SUBST([SUBDIRS])
-AC_SUBST([TSTDIRS])
-AC_SUBST([INSTDIR])
-
-
 # Default observer coordinates for sundazel.
 if test -f "$HOME/.sundazelrc"; then
   . "$HOME/.sundazelrc"
@@ -605,26 +570,26 @@ if test "x$OBSLNG" = x; then
   OBSTZ=0.0
 fi
 
+
+AC_SUBST([CFITSIOINC])
+AC_SUBST([CFITSIOLIB])
+AC_SUBST([GETWCSTAB])
+
+AC_SUBST([PGPLOTINC])
+AC_SUBST([PGPLOTLIB])
+
+AC_SUBST([SUBDIRS])
+AC_SUBST([TSTDIRS])
+AC_SUBST([INSTDIR])
+
 AC_SUBST([OBSLNG])
 AC_SUBST([OBSLAT])
 AC_SUBST([OBSTZ])
 
-
-# Tidy up incrementally defined variables.
-FLFLAGS=`echo $FLFLAGS`
-CPPFLAGS=`echo $CPPFLAGS`
-CFLAGS=`echo $CFLAGS`
-FFLAGS=`echo $FFLAGS`
-LDFLAGS=`echo $LDFLAGS`
-
 AC_MSG_NOTICE([End of auxiliary configuration.
 ])
 
-# Set from the environment for code development.
 AC_SUBST([FLAVOUR])
-AC_SUBST([MODE])
-AC_SUBST([VALGRIND])
-AC_SUBST([EXTRA_CLEAN])
 
 
 # Do it.

@@ -3,29 +3,23 @@
 """
 This module defines magnitude zero points and related photometric quantities.
 
-The corresponding magnitudes are given in the description of each unit.
-(the actual definitions are in `astropy.units.function.units`).
-
-Both the units and magnitudes are available in (and should be used
-through) the `astropy.units` namespace.
-
+The corresponding magnitudes are given in the description of each unit
+(the actual definitions are in `~astropy.units.function.logarithmic`).
 """
 
-import numpy as np
 
-from astropy.constants.si import L_bol0
+import numpy as _numpy
+
+from astropy.constants import si as _si
 
 from . import astrophys, cgs, si
-from .core import def_unit
-from .docgen import generate_dunder_all, generate_unit_summary
-
-__all__ = []  #  Units are added at the end
+from .core import Unit, UnitBase, def_unit
 
 _ns = globals()
 
 def_unit(
     ["Bol", "L_bol"],
-    L_bol0,
+    _si.L_bol0,
     namespace=_ns,
     prefixes=False,
     doc=(
@@ -35,11 +29,11 @@ def_unit(
 )
 def_unit(
     ["bol", "f_bol"],
-    L_bol0 / (4 * np.pi * (10.0 * astrophys.pc) ** 2),
+    _si.L_bol0 / (4 * _numpy.pi * (10.0 * astrophys.pc) ** 2),
     namespace=_ns,
     prefixes=False,
     doc=(
-        "Irradiance corresponding to apparent bolometric magnitude zero "
+        "Irradiance corresponding to appparent bolometric magnitude zero "
         "(magnitude ``m_bol``)."
     ),
 )
@@ -69,13 +63,33 @@ def_unit(
 )
 
 
+def zero_point_flux(flux0):
+    """
+    An equivalency for converting linear flux units ("maggys") defined relative
+    to a standard source into a standardized system.
+
+    Parameters
+    ----------
+    flux0 : `~astropy.units.Quantity`
+        The flux of a magnitude-0 object in the "maggy" system.
+    """
+    flux_unit0 = Unit(flux0)
+    return [(maggy, flux_unit0)]
+
+
 ###########################################################################
-# ALL & DOCSTRING
+# CLEANUP
 
-__all__ += generate_dunder_all(globals())  # noqa: PLE0605
+del UnitBase
+del def_unit
+del cgs, si, astrophys
 
+###########################################################################
+# DOCSTRING
 
 if __doc__ is not None:
     # This generates a docstring for this module that describes all of the
     # standard units defined here.
-    __doc__ += generate_unit_summary(globals())
+    from .utils import generate_unit_summary as _generate_unit_summary
+
+    __doc__ += _generate_unit_summary(globals())

@@ -51,8 +51,7 @@ class EcsvHeader(basic.BasicHeader):
 
     def process_lines(self, lines):
         """Return only non-blank lines that start with the comment regexp.  For these
-        lines strip out the matching characters and leading/trailing whitespace.
-        """
+        lines strip out the matching characters and leading/trailing whitespace."""
         re_comment = re.compile(self.comment)
         for line in lines:
             line = line.strip()
@@ -93,7 +92,7 @@ class EcsvHeader(basic.BasicHeader):
         header = {"cols": self.cols, "schema": "astropy-2.0"}
 
         if self.table_meta:
-            header["meta"] = OrderedDict(self.table_meta)
+            header["meta"] = self.table_meta
 
         # Set the delimiter only for the non-default option(s)
         if self.splitter.delimiter != " ":
@@ -112,12 +111,14 @@ class EcsvHeader(basic.BasicHeader):
         WRITE: Override the default write_comments to do nothing since this is handled
         in the custom write method.
         """
+        pass
 
     def update_meta(self, lines, meta):
         """
         READ: Override the default update_meta to do nothing.  This process is done
         in get_cols() for this reader.
         """
+        pass
 
     def get_cols(self, lines):
         """
@@ -155,10 +156,8 @@ class EcsvHeader(basic.BasicHeader):
 
         try:
             header = meta.get_header_from_yaml(lines)
-        except meta.YamlParseError as e:
-            raise core.InconsistentTableError(
-                "unable to parse yaml in meta header"
-            ) from e
+        except meta.YamlParseError:
+            raise core.InconsistentTableError("unable to parse yaml in meta header")
 
         if "meta" in header:
             self.table_meta = header["meta"]
@@ -173,19 +172,13 @@ class EcsvHeader(basic.BasicHeader):
             self.data.splitter.delimiter = delimiter
 
         # Create the list of io.ascii column objects from `header`
-        header_cols = {x["name"]: x for x in header["datatype"]}
-
+        header_cols = OrderedDict((x["name"], x) for x in header["datatype"])
         self.names = [x["name"] for x in header["datatype"]]
 
         # Read the first non-commented line of table and split to get the CSV
         # header column names.  This is essentially what the Basic reader does.
-        try:
-            header_line = next(super().process_lines(raw_lines))
-            header_names = next(self.splitter([header_line]))
-        except StopIteration:
-            # there are no non-commented lines
-            header_line = ""
-            header_names = []
+        header_line = next(super().process_lines(raw_lines))
+        header_names = next(self.splitter([header_line]))
 
         # Check for consistency of the ECSV vs. CSV header column names
         if header_names != self.names:
@@ -260,7 +253,9 @@ class EcsvOutputter(core.TableOutputter):
         # appropriate mixin columns and remove the original data columns.
         # If no __mixin_columns__ exists then this function just passes back
         # the input table.
-        return serialize._construct_mixins_from_columns(out)
+        out = serialize._construct_mixins_from_columns(out)
+
+        return out
 
     def _convert_vals(self, cols):
         """READ: Convert str_vals in `cols` to final arrays with correct dtypes.
@@ -379,7 +374,7 @@ class EcsvOutputter(core.TableOutputter):
 
 class EcsvData(basic.BasicData):
     def _set_fill_values(self, cols):
-        """READ: Set the fill values of the individual cols based on fill_values of BaseData.
+        """READ: Set the fill values of the individual cols based on fill_values of BaseData
 
         For ECSV handle the corner case of data that has been serialized using
         the serialize_method='data_mask' option, which writes the full data and
@@ -411,7 +406,7 @@ class EcsvData(basic.BasicData):
                 col.fill_values = {}  # No data value replacement
 
     def str_vals(self):
-        """WRITE: convert all values in table to a list of lists of strings.
+        """WRITE: convert all values in table to a list of lists of strings
 
         This version considerably simplifies the base method:
         - No need to set fill values and column formats
@@ -449,7 +444,8 @@ class EcsvData(basic.BasicData):
                 for idx in col.mask.nonzero()[0]:
                     col.str_vals[idx] = ""
 
-        return [col.str_vals for col in self.cols]
+        out = [col.str_vals for col in self.cols]
+        return out
 
 
 class Ecsv(basic.Basic):
@@ -462,6 +458,7 @@ class Ecsv(basic.Basic):
 
     Examples
     --------
+
     >>> from astropy.table import Table
     >>> ecsv_content = '''# %ECSV 0.9
     ... # ---
@@ -513,4 +510,5 @@ class Ecsv(basic.Basic):
             Output table for writing
         """
         with serialize_context_as("ecsv"):
-            return serialize.represent_mixins_as_columns(table)
+            out = serialize.represent_mixins_as_columns(table)
+        return out

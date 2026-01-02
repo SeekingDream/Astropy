@@ -9,7 +9,7 @@
 #include "pyutil.h"
 #include "wcs.h"
 
-extern PyObject* PyWtbarrType;
+extern PyTypeObject PyWtbarrType;
 
 typedef struct {
   PyObject_HEAD

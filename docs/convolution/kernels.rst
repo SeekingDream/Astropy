@@ -71,17 +71,14 @@ The following plot illustrates the results:
     smoothed_data_box = convolve(data_1D, box_kernel)
 
     # Plot data and smoothed data
-    fig, ax = plt.subplots()
-    ax.plot(x, data_1D, label='Original')
-    ax.plot(x, smoothed_data_gauss, label='Smoothed with Gaussian1DKernel')
-    ax.plot(x, smoothed_data_box, label='Smoothed with Box1DKernel')
-    ax.set(
-        xlabel='x [a.u.]',
-        ylabel='amplitude [a.u.]',
-        xlim=(-5, 5),
-        ylim=(-0.1, 1.5),
-    )
-    ax.legend(prop={'size':12})
+    plt.plot(x, data_1D, label='Original')
+    plt.plot(x, smoothed_data_gauss, label='Smoothed with Gaussian1DKernel')
+    plt.plot(x, smoothed_data_box, label='Smoothed with Box1DKernel')
+    plt.xlabel('x [a.u.]')
+    plt.ylabel('amplitude [a.u.]')
+    plt.xlim(-5, 5)
+    plt.ylim(-0.1, 1.5)
+    plt.legend(prop={'size':12})
     plt.show()
 
 
@@ -92,7 +89,7 @@ the kernels with ``numpy`` or ``scipy`` convolution by passing the ``array``
 attribute. This will be faster in most cases than the ``astropy`` convolution,
 but will not work properly if NaN values are present in the data.
 
->>> smoothed = np.convolve(data_1D, box_kernel.array, mode='same')
+>>> smoothed = np.convolve(data_1D, box_kernel.array)
 
 ..
   EXAMPLE END
@@ -147,10 +144,10 @@ This is what the original image looks like:
     y = np.arange(-100, 101)
     x, y = np.meshgrid(x, y)
     data_2D = gauss(x, y) + 0.1 * (rng.random((201, 201)) - 0.5)
-    fig, ax = plt.subplots()
-    im = ax.imshow(data_2D, origin='lower')
-    ax.set(xlabel='x [pixels]', ylabel='y [pixels]')
-    fig.colorbar(im)
+    plt.imshow(data_2D, origin='lower')
+    plt.xlabel('x [pixels]')
+    plt.ylabel('y [pixels]')
+    plt.colorbar()
     plt.show()
 
 The following plot illustrates the differences between several 2D kernels
@@ -198,7 +195,7 @@ scale compared to the original image.
 
     cax = fig.add_axes([0.9, 0.1, 0.03, 0.8])
     fig.colorbar(im, cax=cax)
-    fig.subplots_adjust(left=0.05, right=0.85, top=0.95, bottom=0.05)
+    plt.subplots_adjust(left=0.05, right=0.85, top=0.95, bottom=0.05)
     plt.show()
 
 

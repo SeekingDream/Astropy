@@ -11,15 +11,8 @@ Introduction
 
 The :mod:`astropy.io.fits` package provides access to FITS files. FITS
 (Flexible Image Transport System) is a portable file standard widely used in
-the astronomy community to store images and tables.
-
-.. note::
-
-    If you want to read or write a single table in FITS format, the
-    recommended method is via the :ref:`table_io` interface. In particular
-    see the :ref:`Unified I/O FITS <table_io_fits>` section. Likewise, for CCD image
-    data with a physical unit (e.g., ``electron``), see the :ref:`Unified Image Data<io_unified_image>` section.
-
+the astronomy community to store images and tables. This subpackage was
+originally developed as PyFITS.
 
 .. _tutorial:
 
@@ -32,6 +25,11 @@ much detail. If you are a first time user or have never used ``astropy`` or
 PyFITS, this is where you should start. See also the :ref:`FAQ <io-fits-faq>`
 for answers to common questions and issues.
 
+.. note::
+
+    If you want to read or write a single table in FITS format, the
+    recommended method is via the high-level :ref:`table_io`. In particular
+    see the :ref:`Unified I/O FITS <table_io_fits>` section.
 
 Reading and Updating Existing FITS Files
 ----------------------------------------
@@ -42,9 +40,9 @@ Opening a FITS File
 .. note::
 
     The ``astropy.io.fits.util.get_testdata_filepath()`` function,
-    used in the examples here, returns file path for test data shipped with ``astropy``.
-    To work with your own data instead, please use :func:`astropy.io.fits.open` or :ref:`io-fits-intro-convenience-functions`,
-    which take either the relative or absolute path as string or :term:`python:path-like object`.
+    used in the examples here, is for accessing data shipped with ``astropy``.
+    To work with your own data instead, please use :func:`astropy.io.fits.open`,
+    which takes either the relative or absolute path.
 
 Once the `astropy.io.fits` package is loaded using the standard convention
 [#f1]_, we can open an existing FITS file::
@@ -142,7 +140,7 @@ Working with remote and cloud-hosted files
 """"""""""""""""""""""""""""""""""""""""""
 
 The :func:`open` function supports a ``use_fsspec`` argument which allows file
-paths to be opened using |fsspec|.
+paths to be opened using `fsspec`_.
 The ``fsspec`` package supports a range of remote and distributed storage
 backends such as Amazon and Google Cloud Storage. For example, you can access a
 Hubble Space Telescope image located in the Hubble's public
@@ -199,15 +197,13 @@ Working with compressed files
 
 
 The :func:`open` function will seamlessly open FITS files that have been
-compressed with gzip, bzip2, pkzip, lzma or Unix's compress (LZW compression).
-Note that in this context we are talking about a FITS file that has been
-compressed with one of these utilities (e.g., a .fits.gz file).
+compressed with gzip, bzip2 or pkzip. Note that in this context we are talking
+about a FITS file that has been compressed with one of these utilities (e.g., a
+.fits.gz file).
 
 There are some limitations when working with compressed files. For example,
 with Zip files that contain multiple compressed files, only the first file will
-be accessible. Also bzip2 and lzma do not support the append or update access
-mode and LZW-compressed files do not support any writing modes (including append
-or update).
+be accessible. Also bzip2 does not support the append or update access modes.
 
 When writing a file (e.g., with the :func:`writeto` function), compression will
 be determined based on the filename extension given, or the compression used in
@@ -362,9 +358,9 @@ would with a dict::
     >>> list(hdr.keys())  # doctest: +ELLIPSIS
     ['SIMPLE', 'BITPIX', 'NAXIS', ...]
 
-.. note::
+.. topic:: Examples:
 
-    See also :ref:`io-fits-intro-convenience-functions`.
+    See also :ref:`sphx_glr_generated_examples_io_modify-fits-header.py`.
 
 .. _structural_keywords:
 
@@ -401,17 +397,10 @@ and/or updated as a consequence of common operations. For example, when:
 3. Writing a file. All the necessary keywords are deleted, updated or added to the header.
 4. Calling an HDU's verify method (e.g., :func:`PrimaryHDU.verify`). Some keywords can be fixed automatically.
 
-In these cases any hand-written values users might assign to those keywords will be overwritten.
+In these cases any hand-written values users might assign to those keywords will be overwrittten.
 
 Working with Image Data
 ^^^^^^^^^^^^^^^^^^^^^^^
-
-.. note::
-    This section describes reading and writing image data in the FITS format using the
-    `~astropy.io.fits` package directly. For CCD image data with a unit, you should
-    consider using the :ref:`Unified Image Data<io_unified_image>` interface with the
-    :ref:`CCDData class <ccddata>`. This provides the the capability to load data,
-    uncertainty and mask from a multi-extension FITS (MEF) file.
 
 If an HDU's data is an image, the data attribute of the HDU object will return
 a ``numpy`` `~numpy.ndarray` object. Refer to the ``numpy`` documentation for
@@ -463,7 +452,7 @@ the second index. Similarly, the 1-indexed subsection of x=11 to 20
            [347, 348, 347, 348, 349, 349, 350, 349, 348, 348],
            [349, 349, 350, 348, 350, 347, 349, 349, 349, 348],
            [349, 348, 348, 348, 348, 348, 349, 347, 349, 348],
-           [349, 349, 349, 348, 350, 349, 349, 350, 348, 350]], dtype='>i2')
+           [349, 349, 349, 348, 350, 349, 349, 350, 348, 350]], dtype=int16)
 
 To update the value of a pixel or a subsection::
 
@@ -490,21 +479,19 @@ personal computers.
 If at this point you want to preserve all of the changes you made and write it
 to a new file, you can use the :meth:`HDUList.writeto` method (see below).
 
-.. _Numpy documentation: https://numpy.org/doc/stable/reference/routines.indexing.html
+.. _Numpy documentation: https://numpy.org/doc/stable/reference/arrays.indexing.html
 
-.. note::
+.. topic:: Examples:
 
-    See more information in :doc:`/io/fits/usage/image`.
+    See also :ref:`sphx_glr_generated_examples_io_plot_fits-image.py`.
 
 Working with Table Data
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-.. note::
-    This section describes reading and writing table data in the FITS format
-    using the `~astropy.io.fits` package directly. If you want to read or write a single
-    entire table in FITS format, the you should consider using the :ref:`table_io`
-    interface (e.g., ``QTable.read``). See the :ref:`Unified I/O FITS <table_io_fits>`
-    section for details.
+This section describes reading and writing table data in the FITS format using
+the `~astropy.io.fits` package directly. For some cases, however, the
+high-level :ref:`table_io` will often suffice and is somewhat more convenient
+to use. See the :ref:`Unified I/O FITS <table_io_fits>` section for details.
 
 Like images, the data portion of a FITS table extension is in the ``.data``
 attribute::
@@ -522,7 +509,7 @@ guide.
 To see the first row of the table::
 
     >>> print(data[0])
-    (np.int32(1), 'abc', np.float64(3.7000000715255736), np.False_)
+    (1, 'abc', 3.7000000715255736, False)
 
 Each row in the table is a :class:`FITS_record` object which looks like a
 (Python) tuple containing elements of heterogeneous data types. In this
@@ -622,9 +609,13 @@ Since each field is a ``numpy`` object, we will have the entire arsenal of
 take the mean of a column::
 
     >>> data['c3'].mean()  # doctest: +FLOAT_CMP
-    np.float64(5.19999989271164)
+    5.19999989271164
 
 and so on.
+
+.. topic:: Examples:
+
+    See also :ref:`sphx_glr_generated_examples_io_fits-tables.py`.
 
 Save File Changes
 ^^^^^^^^^^^^^^^^^
@@ -669,11 +660,11 @@ file consisting of only the primary HDU with image data.
 First, we create a ``numpy`` object for the data part::
 
     >>> import numpy as np
-    >>> data = np.arange(100.0) # a simple sequence of floats from 0.0 to 99.0
+    >>> n = np.arange(100.0) # a simple sequence of floats from 0.0 to 99.9
 
 Next, we create a :class:`PrimaryHDU` object to encapsulate the data::
 
-    >>> hdu = fits.PrimaryHDU(data=data)
+    >>> hdu = fits.PrimaryHDU(n)
 
 We then create an :class:`HDUList` to contain the newly created primary HDU, and write to
 a new file::
@@ -769,20 +760,27 @@ additional data or header keywords in the primary HDU you may still create a
 :class:`PrimaryHDU` object and build up the FITS file manually using an
 :class:`HDUList`, as described in the next section.
 
-Creating a Multi-Extension FITS (MEF) file
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Creating a File with Multiple Extensions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In the previous examples we created files with a single meaningful extension (a
 :class:`PrimaryHDU` or :class:`BinTableHDU`). To create a file with multiple
 extensions we need to create extension HDUs and append them to an :class:`HDUList`.
 
-First, we create some data for Image extensions and we place the data into
-separate :class:`PrimaryHDU` and :class:`ImageHDU` objects::
+First, we create some data for Image extensions::
 
     >>> import numpy as np
-    >>> primary_hdu = fits.PrimaryHDU(data=np.ones((3, 3)))
-    >>> image_hdu = fits.ImageHDU(data=np.ones((100, 100)), name="MYIMAGE")
-    >>> image_hdu2 = fits.ImageHDU(data=np.ones((10, 10, 10)), name="MYCUBE")
+    >>> n = np.ones((3, 3))
+    >>> n2 = np.ones((100, 100))
+    >>> n3 = np.ones((10, 10, 10))
+
+Note that the data shapes of the different extensions do not need to be the same.
+Next, place the data into separate :class:`PrimaryHDU` and :class:`ImageHDU`
+objects::
+
+    >>> primary_hdu = fits.PrimaryHDU(n)
+    >>> image_hdu = fits.ImageHDU(n2)
+    >>> image_hdu2 = fits.ImageHDU(n3)
 
 A multi-extension FITS file is not constrained to be only imaging or table data, we
 can mix them. To show this we'll use the example from the previous section to make a
@@ -834,7 +832,9 @@ We then create an HDUList containing both the primary HDU and any other HDUs wan
 
     >>> hdul = fits.HDUList([empty_primary, image_hdu2, table_hdu])
 
-.. _io-fits-intro-convenience-functions:
+.. topic:: Examples:
+
+    See also :ref:`sphx_glr_generated_examples_io_create-mef.py`.
 
 Convenience Functions
 ---------------------
@@ -860,11 +860,14 @@ specify which HDU the user wants to access::
 
     >>> from astropy.io.fits import getheader
     >>> hdr = getheader(fits_image_filename)  # get default HDU (=0), i.e. primary HDU's header
-    >>> hdr = getheader(fits_image_filename, ext=0)  # get primary HDU's header
+    >>> hdr = getheader(fits_image_filename, 0)  # get primary HDU's header
+    >>> hdr = getheader(fits_image_filename, 2)  # the second extension
+    >>> hdr = getheader(fits_image_filename, 'sci')  # the first HDU with EXTNAME='SCI'
+    >>> hdr = getheader(fits_image_filename, 'sci', 2)  # HDU with EXTNAME='SCI' and EXTVER=2
+    >>> hdr = getheader(fits_image_filename, ('sci', 2))  # use a tuple to do the same
     >>> hdr = getheader(fits_image_filename, ext=2)  # the second extension
-    >>> hdr = getheader(fits_image_filename, extname='sci')  # the first HDU with EXTNAME='SCI'
-    >>> hdr = getheader(fits_image_filename, extname='sci', extver=2)  # HDU with EXTNAME='SCI' and EXTVER=2
-    >>> hdr = getheader(fits_image_filename, ext=('sci', 2))  # use a tuple to do the same
+    >>> hdr = getheader(fits_image_filename, extname='sci')  # first HDU with EXTNAME='SCI'
+    >>> hdr = getheader(fits_image_filename, extname='sci', extver=2)
 
 Ambiguous specifications will raise an exception::
 
@@ -877,10 +880,10 @@ After you get the header, you can access the information in it, such as getting
 and modifying a keyword value::
 
     >>> fits_image_2_filename = fits.util.get_testdata_filepath('o4sp040b0_raw.fits')
-    >>> hdr = getheader(fits_image_2_filename, ext=0)  # get primary hdu's header
-    >>> filter = hdr['filter']                         # get the value of the keyword "filter'
-    >>> val = hdr[10]                                  # get the 11th keyword's value
-    >>> hdr['filter'] = 'FW555'                        # change the keyword value
+    >>> hdr = getheader(fits_image_2_filename, 0)    # get primary hdu's header
+    >>> filter = hdr['filter']                       # get the value of the keyword "filter'
+    >>> val = hdr[10]                                # get the 11th keyword's value
+    >>> hdr['filter'] = 'FW555'                      # change the keyword value
 
 For the header keywords, the header is like a dictionary, as well as a list.
 The user can access the keywords either by name or by numeric index, as
@@ -892,23 +895,14 @@ examples::
 
     >>> from astropy.io.fits import getval
     >>> # get 0th extension's keyword FILTER's value
-    >>> getval(fits_image_2_filename, 'filter', ext=0)
+    >>> flt = getval(fits_image_2_filename, 'filter', 0)
+    >>> flt
     'Clear'
 
     >>> # get the 2nd sci extension's 11th keyword's value
-    >>> getval(fits_image_2_filename, 10, extname='sci', extver=2)
+    >>> val = getval(fits_image_2_filename, 10, 'sci', 2)
+    >>> val
     False
-
-To edit a single header value in the header for extension 0, use the
-:func:`setval` function. For example, to change the value of the "filter"
-keyword::
-
-    >>> fits.setval(fits_image_2_filename, "filter", value="FW555")  # doctest: +SKIP
-
-This can also be used to create a new keyword-value pair ("card" in FITS
-lingo)::
-
-    >>> fits.setval(fits_image_2_filename, "ANEWKEY", value="some value")  # doctest: +SKIP
 
 The function :func:`getdata` gets the data of an HDU. Similar to
 :func:`getheader`, it only requires the input FITS file name while the
@@ -918,9 +912,9 @@ both data and header, otherwise only data is returned::
 
     >>> from astropy.io.fits import getdata
     >>> # get 3rd sci extension's data:
-    >>> data = getdata(fits_image_filename, extname='sci', extver=3)
+    >>> data = getdata(fits_image_filename, 'sci', 3)
     >>> # get 1st extension's data AND header:
-    >>> data, hdr = getdata(fits_image_filename, ext=1, header=True)
+    >>> data, hdr = getdata(fits_image_filename, 1, header=True)
 
 The functions introduced above are for reading. The next few functions
 demonstrate convenience functions for writing::
@@ -1042,9 +1036,17 @@ Reference/API
 .. automodule:: astropy.io.fits
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 3
 
-    api/index.rst
+    api/files.rst
+    api/hdulists.rst
+    api/hdus.rst
+    api/headers.rst
+    api/cards.rst
+    api/tables.rst
+    api/images.rst
+    api/diff.rst
+    api/verification.rst
 
 .. rubric:: Footnotes
 

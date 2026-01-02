@@ -4,7 +4,7 @@
 #include "pyutil.h"
 #include "wcs.h"
 
-extern PyObject* PyAuxprmType;
+extern PyTypeObject PyAuxprmType;
 
 typedef struct {
   PyObject_HEAD

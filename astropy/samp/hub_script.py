@@ -3,7 +3,6 @@
 
 import argparse
 import copy
-import logging
 import sys
 import time
 
@@ -18,9 +17,8 @@ def hub_script(timeout=0):
     """
     This main function is executed by the ``samp_hub`` command line tool.
     """
+
     parser = argparse.ArgumentParser(prog="samp_hub " + __version__)
-    # TODO: pass suggest_on_error as kwarg when PYTHON_LT_14 is dropped
-    parser.suggest_on_error = True
 
     parser.add_argument(
         "-k", "--secret", dest="secret", metavar="CODE", help="custom secret code."
@@ -109,20 +107,16 @@ def hub_script(timeout=0):
         "specify the output files where redirect the logging messages.",
     )
 
-    # valid logging levels as strings, reverse ordered by level.
-    # the default 'INFO' is assumed to exist (...)
-    log_levels = sorted(d := logging.getLevelNamesMapping(), key=d.get, reverse=True)
     log_group.add_argument(
         "-L",
         "--log-level",
         dest="loglevel",
         metavar="LEVEL",
-        help=f"set the Hub instance log level ({', '.join(log_levels)}).",
+        help="set the Hub instance log level (OFF, ERROR, WARNING, INFO, DEBUG).",
         type=str,
-        choices=log_levels,
+        choices=["OFF", "ERROR", "WARNING", "INFO", "DEBUG"],
         default="INFO",
     )
-    del log_levels
 
     log_group.add_argument(
         "-O",
@@ -177,7 +171,8 @@ def hub_script(timeout=0):
     options = parser.parse_args()
 
     try:
-        log.setLevel(options.loglevel)
+        if options.loglevel in ("OFF", "ERROR", "WARNING", "DEBUG", "INFO"):
+            log.setLevel(options.loglevel)
 
         if options.logout != "":
             context = log.log_to_file(options.logout)

@@ -2,7 +2,7 @@
 
 """
 Classes that deal with stretching, i.e. mapping a range of [0:1] values onto
-another set of [0:1] values with a transformation.
+another set of [0:1] values with a transformation
 """
 
 import numpy as np
@@ -10,25 +10,24 @@ import numpy as np
 from .transform import BaseTransform, CompositeTransform
 
 __all__ = [
-    "AsinhStretch",
     "BaseStretch",
-    "CompositeStretch",
-    "ContrastBiasStretch",
-    "HistEqStretch",
     "LinearStretch",
-    "LogStretch",
-    "PowerDistStretch",
-    "PowerStretch",
-    "SinhStretch",
     "SqrtStretch",
+    "PowerStretch",
+    "PowerDistStretch",
     "SquaredStretch",
+    "LogStretch",
+    "AsinhStretch",
+    "SinhStretch",
+    "HistEqStretch",
+    "ContrastBiasStretch",
+    "CompositeStretch",
 ]
 
 
 def _logn(n, x, out=None):
     """Calculate the log base n of x."""
-    # We define this because numpy.emath.logn doesn't support the out
-    # keyword.
+    # We define this because numpy.lib.scimath.logn doesn't support out=
     if out is None:
         return np.log(x) / np.log(n)
     else:
@@ -42,6 +41,7 @@ def _prepare(values, clip=True, out=None):
     Prepare the data by optionally clipping and copying, and return the
     array that should be subsequently used for in-place calculations.
     """
+
     if clip:
         return np.clip(values, 0.0, 1.0, out=out)
     else:
@@ -54,8 +54,8 @@ def _prepare(values, clip=True, out=None):
 
 class BaseStretch(BaseTransform):
     """
-    Base class for the stretch classes, which when called with an array
-    of values in the range [0:1], returns an transformed array of values
+    Base class for the stretch classes, which, when called with an array
+    of values in the range [0:1], return an transformed array of values,
     also in the range [0:1].
     """
 
@@ -100,7 +100,7 @@ class LinearStretch(BaseStretch):
     The stretch is given by:
 
     .. math::
-        y = slope * x + intercept
+        y = slope x + intercept
 
     Parameters
     ----------
@@ -108,34 +108,6 @@ class LinearStretch(BaseStretch):
         The ``slope`` parameter used in the above formula.  Default is 1.
     intercept : float, optional
         The ``intercept`` parameter used in the above formula.  Default is 0.
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import LinearStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        slopes = [1, 0.5, 1.3, 1.4, 2.0]
-        intercepts = [0, 0.0, -0.4, 0., 0.2]
-        for slope, intercept in zip(slopes, intercepts):
-            stretch = LinearStretch(slope, intercept)
-            label = f'{slope=}, {intercept=}'
-            ax.plot(x, stretch(x, clip=True), label=label)
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
-        ax.legend(loc='lower right', fontsize=8)
     """
 
     def __init__(self, slope=1, intercept=0):
@@ -149,10 +121,6 @@ class LinearStretch(BaseStretch):
             np.multiply(values, self.slope, out=values)
         if self.intercept != 0:
             np.add(values, self.intercept, out=values)
-
-        if clip:
-            np.clip(values, 0, 1, out=values)
-
         return values
 
     @property
@@ -169,29 +137,6 @@ class SqrtStretch(BaseStretch):
 
     .. math::
         y = \sqrt{x}
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import SqrtStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        stretch = SqrtStretch()
-        ax.plot(x, stretch(x, clip=True))
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
     """
 
     @property
@@ -227,6 +172,7 @@ class SqrtStretch(BaseStretch):
         result : ndarray
             The transformed values.
         """
+
         values = _prepare(values, clip=clip, out=out)
         replace_invalid = not clip and invalid is not None
         with np.errstate(invalid="ignore"):
@@ -259,35 +205,8 @@ class PowerStretch(BaseStretch):
     Parameters
     ----------
     a : float
-        The power index (see the above formula). ``a`` must be greater
+        The power index (see the above formula).  ``a`` must be greater
         than 0.
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import PowerStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        a_vals = (0.3, 0.5, 0.7, 1, 1.5, 2, 3)
-        for a in a_vals:
-            stretch = PowerStretch(a)
-            label = f'{a=}'
-            ax.plot(x, stretch(x, clip=True), label=label)
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
-        ax.legend(loc='lower right', fontsize=8)
     """
 
     @property
@@ -298,7 +217,7 @@ class PowerStretch(BaseStretch):
         super().__init__()
         if a <= 0:
             raise ValueError("a must be > 0")
-        self.a = a
+        self.power = a
 
     def __call__(self, values, clip=True, out=None, invalid=None):
         """
@@ -329,14 +248,17 @@ class PowerStretch(BaseStretch):
         result : ndarray
             The transformed values.
         """
+
         values = _prepare(values, clip=clip, out=out)
         replace_invalid = (
-            not clip and invalid is not None and ((-1 < self.a < 0) or (0 < self.a < 1))
+            not clip
+            and invalid is not None
+            and ((-1 < self.power < 0) or (0 < self.power < 1))
         )
         with np.errstate(invalid="ignore"):
             if replace_invalid:
                 idx = values < 0
-            np.power(values, self.a, out=values)
+            np.power(values, self.power, out=values)
 
         if replace_invalid:
             # Assign new NaN (i.e., NaN not in the original input
@@ -348,7 +270,7 @@ class PowerStretch(BaseStretch):
     @property
     def inverse(self):
         """A stretch object that performs the inverse operation."""
-        return PowerStretch(1.0 / self.a)
+        return PowerStretch(1.0 / self.power)
 
 
 class PowerDistStretch(BaseStretch):
@@ -363,100 +285,65 @@ class PowerDistStretch(BaseStretch):
     Parameters
     ----------
     a : float, optional
-        The ``a`` parameter used in the above formula. The stretch
-        becomes more linear as ``a`` approaches 1, more exponential for
-        ``a`` values greater than 1, and more logarithmic for ``a``
-        values less than 1. ``a`` must be greater than 0, but cannot be
-        set to 1. Default is 1000.
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import PowerDistStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        a_vals = (0.001, 0.05, 0.3, 0.8, 1.2, 3, 10, 30, 100, 1000)
-        for a in a_vals:
-            if a == 1000:
-                lw = 3
-            else:
-                lw = 1
-            stretch = PowerDistStretch(a)
-            label = f'{a=}'
-            ax.plot(x, stretch(x, clip=True), label=label, lw=lw)
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
-        ax.legend(loc='upper left', fontsize=8)
+        The ``a`` parameter used in the above formula.  ``a`` must be
+        greater than or equal to 0, but cannot be set to 1.  Default is
+        1000.
     """
 
     def __init__(self, a=1000.0):
-        if a <= 0 or a == 1:  # singularity
-            raise ValueError("a must be > 0, but cannot be set to 1")
+        if a < 0 or a == 1:  # singularity
+            raise ValueError("a must be >= 0, but cannot be set to 1")
         super().__init__()
-        self.a = a
+        self.exp = a
 
     def __call__(self, values, clip=True, out=None):
         values = _prepare(values, clip=clip, out=out)
-        np.power(self.a, values, out=values)
+        np.power(self.exp, values, out=values)
         np.subtract(values, 1, out=values)
-        np.true_divide(values, self.a - 1.0, out=values)
+        np.true_divide(values, self.exp - 1.0, out=values)
         return values
 
     @property
     def inverse(self):
         """A stretch object that performs the inverse operation."""
-        return InvertedPowerDistStretch(a=self.a)
+        return InvertedPowerDistStretch(a=self.exp)
 
 
 class InvertedPowerDistStretch(BaseStretch):
     r"""
     Inverse transformation for
-    `~astropy.visualization.PowerDistStretch`.
+    `~astropy.image.scaling.PowerDistStretch`.
 
     The stretch is given by:
 
     .. math::
-        y = \frac{\log(x (a - 1) + 1)}{\log a}
+        y = \frac{\log(y (a-1) + 1)}{\log a}
 
     Parameters
     ----------
     a : float, optional
-        The ``a`` parameter used in the above formula. The stretch
-        becomes more linear as ``a`` approaches 1, more logarithmic for
-        ``a`` values greater than 1, and more exponential for ``a``
-        values less than 1. ``a`` must be greater than 0, but cannot be
-        set to 1. Default is 1000.
+        The ``a`` parameter used in the above formula.  ``a`` must be
+        greater than or equal to 0, but cannot be set to 1.  Default is
+        1000.
     """
 
     def __init__(self, a=1000.0):
-        if a <= 0 or a == 1:  # singularity
-            raise ValueError("a must be > 0, but cannot be set to 1")
+        if a < 0 or a == 1:  # singularity
+            raise ValueError("a must be >= 0, but cannot be set to 1")
         super().__init__()
-        self.a = a
+        self.exp = a
 
     def __call__(self, values, clip=True, out=None):
         values = _prepare(values, clip=clip, out=out)
-        np.multiply(values, self.a - 1.0, out=values)
+        np.multiply(values, self.exp - 1.0, out=values)
         np.add(values, 1, out=values)
-        _logn(self.a, values, out=values)
+        _logn(self.exp, values, out=values)
         return values
 
     @property
     def inverse(self):
         """A stretch object that performs the inverse operation."""
-        return PowerDistStretch(a=self.a)
+        return PowerDistStretch(a=self.exp)
 
 
 class SquaredStretch(PowerStretch):
@@ -467,29 +354,6 @@ class SquaredStretch(PowerStretch):
 
     .. math::
         y = x^2
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import SquaredStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        stretch = SquaredStretch()
-        ax.plot(x, stretch(x, clip=True))
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
     """
 
     def __init__(self):
@@ -513,40 +377,8 @@ class LogStretch(BaseStretch):
     Parameters
     ----------
     a : float
-        The ``a`` parameter used in the above formula. The stretch
-        becomes more linear for small ``a`` values. ``a`` must be
-        greater than 0. Default is 1000.
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import LogStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        a_vals = (0.1, 1, 3, 10, 30, 100, 1000, 10000)
-        for a in a_vals:
-            if a == 1000:
-                lw = 3
-            else:
-                lw = 1
-            stretch = LogStretch(a)
-            label = f'{a=}'
-            ax.plot(x, stretch(x, clip=True), label=label, lw=lw)
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
-        ax.legend(loc='lower right', fontsize=8)
+        The ``a`` parameter used in the above formula.  ``a`` must be
+        greater than 0.  Default is 1000.
     """
 
     @property
@@ -557,7 +389,7 @@ class LogStretch(BaseStretch):
         super().__init__()
         if a <= 0:  # singularity
             raise ValueError("a must be > 0")
-        self.a = a
+        self.exp = a
 
     def __call__(self, values, clip=True, out=None, invalid=None):
         """
@@ -588,15 +420,16 @@ class LogStretch(BaseStretch):
         result : ndarray
             The transformed values.
         """
+
         values = _prepare(values, clip=clip, out=out)
         replace_invalid = not clip and invalid is not None
         with np.errstate(invalid="ignore"):
             if replace_invalid:
                 idx = values < 0
-            np.multiply(values, self.a, out=values)
+            np.multiply(values, self.exp, out=values)
             np.add(values, 1.0, out=values)
             np.log(values, out=values)
-            np.true_divide(values, np.log(self.a + 1.0), out=values)
+            np.true_divide(values, np.log(self.exp + 1.0), out=values)
 
         if replace_invalid:
             # Assign new NaN (i.e., NaN not in the original input
@@ -608,45 +441,44 @@ class LogStretch(BaseStretch):
     @property
     def inverse(self):
         """A stretch object that performs the inverse operation."""
-        return InvertedLogStretch(self.a)
+        return InvertedLogStretch(self.exp)
 
 
 class InvertedLogStretch(BaseStretch):
     r"""
-    Inverse transformation for `~astropy.visualization.LogStretch`.
+    Inverse transformation for `~astropy.image.scaling.LogStretch`.
 
     The stretch is given by:
 
     .. math::
-        y = \frac{e^{x \log{a + 1}} - 1}{a} = \frac{(a + 1)^x - 1}{a}
+        y = \frac{e^{y \log{a + 1}} - 1}{a} \\
+        y = \frac{e^{y} (a + 1) - 1}{a}
 
     Parameters
     ----------
     a : float, optional
-        The ``a`` parameter used in the above formula. The stretch
-        becomes more linear for small ``a`` values and more exponential
-        for large ``a`` values. ``a`` must be greater than 0. Default is
-        1000.
+        The ``a`` parameter used in the above formula.  ``a`` must be
+        greater than 0.  Default is 1000.
     """
 
     def __init__(self, a):
         super().__init__()
         if a <= 0:  # singularity
             raise ValueError("a must be > 0")
-        self.a = a
+        self.exp = a
 
     def __call__(self, values, clip=True, out=None):
         values = _prepare(values, clip=clip, out=out)
-        np.multiply(values, np.log(self.a + 1.0), out=values)
+        np.multiply(values, np.log(self.exp + 1.0), out=values)
         np.exp(values, out=values)
         np.subtract(values, 1.0, out=values)
-        np.true_divide(values, self.a, out=values)
+        np.true_divide(values, self.exp, out=values)
         return values
 
     @property
     def inverse(self):
         """A stretch object that performs the inverse operation."""
-        return LogStretch(self.a)
+        return LogStretch(self.exp)
 
 
 class AsinhStretch(BaseStretch):
@@ -661,49 +493,17 @@ class AsinhStretch(BaseStretch):
     Parameters
     ----------
     a : float, optional
-        The ``a`` parameter used in the above formula. The value of this
-        parameter is where the asinh curve transitions from linear to
-        logarithmic behavior, expressed as a fraction of the normalized
-        image. The stretch becomes more linear for larger ``a`` values
-        and more logarithmic for smaller ``a`` values. ``a`` must be
-        greater than 0. Default is 0.1.
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import AsinhStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        a_vals = (0.01, 0.05, 0.1, 0.2, 0.3, 0.5, 0.9, 3.0)
-        for a in a_vals:
-            if a == 0.1:
-                lw = 3
-            else:
-                lw = 1
-            stretch = AsinhStretch(a)
-            label = f'{a=}'
-            ax.plot(x, stretch(x, clip=True), label=label, lw=lw)
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
-        ax.legend(loc='lower right', fontsize=8)
+        The ``a`` parameter used in the above formula.  The value of
+        this parameter is where the asinh curve transitions from linear
+        to logarithmic behavior, expressed as a fraction of the
+        normalized image.  ``a`` must be greater than 0 and less than or
+        equal to 1 (0 < a <= 1).  Default is 0.1.
     """
 
     def __init__(self, a=0.1):
         super().__init__()
-        if a <= 0:
-            raise ValueError("a must be > 0")
+        if a <= 0 or a > 1:
+            raise ValueError("a must be > 0 and <= 1")
         self.a = a
 
     def __call__(self, values, clip=True, out=None):
@@ -731,47 +531,15 @@ class SinhStretch(BaseStretch):
     Parameters
     ----------
     a : float, optional
-        The ``a`` parameter used in the above formula. The stretch
-        becomes more linear for larger ``a`` values and more exponential
-        for smaller ``a`` values. ``a`` must be greater than 0. Default
-        is 1/3.
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import SinhStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        a_vals = (0.1, 0.2, 0.3333, 0.5, 0.9, 3)
-        for a in a_vals:
-            if a == 0.3333:
-                lw = 3
-            else:
-                lw = 1
-            stretch = SinhStretch(a)
-            label = f'{a=}'
-            ax.plot(x, stretch(x, clip=True), label=label, lw=lw)
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
-        ax.legend(loc='upper left', fontsize=8)
+        The ``a`` parameter used in the above formula.  ``a`` must be
+        greater than 0 and less than or equal to 1 (0 < a <= 1).
+        Default is 1/3.
     """
 
     def __init__(self, a=1.0 / 3.0):
         super().__init__()
-        if a <= 0:
-            raise ValueError("a must be > 0")
+        if a <= 0 or a > 1:
+            raise ValueError("a must be > 0 and <= 1")
         self.a = a
 
     def __call__(self, values, clip=True, out=None):
@@ -827,7 +595,7 @@ class HistEqStretch(BaseStretch):
 
 class InvertedHistEqStretch(BaseStretch):
     """
-    Inverse transformation for `~astropy.visualization.HistEqStretch`.
+    Inverse transformation for `~astropy.image.scaling.HistEqStretch`.
 
     Parameters
     ----------
@@ -874,33 +642,6 @@ class ContrastBiasStretch(BaseStretch):
 
     bias : float
         The bias parameter (see the above formula).
-
-    Examples
-    --------
-    .. plot::
-        :show-source-link:
-
-        import numpy as np
-        from astropy.visualization import ContrastBiasStretch
-        from matplotlib import pyplot as plt
-
-        fig, ax = plt.subplots(figsize=(5, 5))
-
-        x = np.linspace(0, 1, 100)
-        contrasts = [1.0, 2.0, 0.7, 1.0, 1.0, 2.0]
-        biases = [0.5, 0.5, 0.5, 0.3, 0.7, 0.3]
-        for contrast, bias in zip(contrasts, biases):
-            stretch = ContrastBiasStretch(contrast, bias)
-            ax.plot(x, stretch(x, clip=True), label=f'{contrast=}, {bias=}')
-
-        ax.axis('equal')
-        ax.plot(x, x, ls='dotted', color='k', alpha=0.3)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_xlabel('Input Value')
-        ax.set_ylabel('Output Value')
-        ax.set_title(stretch.__class__.__name__)
-        ax.legend(loc='lower right', fontsize=8)
     """
 
     def __init__(self, contrast, bias):
@@ -929,24 +670,18 @@ class ContrastBiasStretch(BaseStretch):
 
 
 class InvertedContrastBiasStretch(BaseStretch):
-    r"""
-    Inverse transformation for
-    `~astropy.visualization.ContrastBiasStretch`.
-
-    The stretch is given by:
-
-    .. math::
-        y = \frac{x - 0.5}{{\rm contrast}} + {\rm bias}
+    """
+    Inverse transformation for ContrastBiasStretch.
 
     Parameters
     ----------
     contrast : float
         The contrast parameter (see
-        `~astropy.visualization.ContrastBiasStretch`).
+        `~astropy.visualization.ConstrastBiasStretch).
 
     bias : float
         The bias parameter (see
-        `~astropy.visualization.ContrastBiasStretch`).
+        `~astropy.visualization.ConstrastBiasStretch).
     """
 
     def __init__(self, contrast, bias):

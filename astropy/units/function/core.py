@@ -2,9 +2,6 @@
 """Function Units and Quantities."""
 
 from abc import ABCMeta, abstractmethod
-from collections.abc import Collection
-from functools import cached_property
-from typing import Self
 
 import numpy as np
 
@@ -17,18 +14,11 @@ from astropy.units import (
     UnitTypeError,
     dimensionless_unscaled,
 )
-from astropy.units.typing import PhysicalTypeID
-from astropy.utils.compat import COPY_IF_NEEDED, NUMPY_LT_2_0
 
-if NUMPY_LT_2_0:
-    from numpy.core import umath as np_umath
-else:
-    from numpy._core import umath as np_umath
-
-__all__ = ["FunctionQuantity", "FunctionUnitBase"]
+__all__ = ["FunctionUnitBase", "FunctionQuantity"]
 
 SUPPORTED_UFUNCS = {
-    getattr(np_umath, ufunc)
+    getattr(np.core.umath, ufunc)
     for ufunc in (
         "isfinite",
         "isinf",
@@ -43,7 +33,7 @@ SUPPORTED_UFUNCS = {
         "ones_like",
         "positive",
     )
-    if hasattr(np_umath, ufunc)
+    if hasattr(np.core.umath, ufunc)
 }
 
 # TODO: the following could work if helper changed relative to Quantity:
@@ -171,7 +161,7 @@ class FunctionUnitBase(metaclass=ABCMeta):
         return [(self, self.physical_unit, self.to_physical, self.from_physical)]
 
     # ↓↓↓ properties/methods required to behave like a unit
-    def decompose(self, bases: Collection[UnitBase] = ()) -> Self:
+    def decompose(self, bases=set()):
         """Copy the current unit with the physical unit decomposed.
 
         For details, see `~astropy.units.UnitBase.decompose`.
@@ -188,10 +178,9 @@ class FunctionUnitBase(metaclass=ABCMeta):
         """Copy the current function unit with the physical unit in CGS."""
         return self._copy(self.physical_unit.cgs)
 
-    @cached_property
-    def _physical_type_id(self) -> PhysicalTypeID:
+    def _get_physical_type_id(self):
         """Get physical type corresponding to physical unit."""
-        return self.physical_unit._physical_type_id
+        return self.physical_unit._get_physical_type_id()
 
     @property
     def physical_type(self):
@@ -315,9 +304,9 @@ class FunctionUnitBase(metaclass=ABCMeta):
         return not self.__eq__(other)
 
     def __rlshift__(self, other):
-        """Unit conversion operator ``<<``."""
+        """Unit conversion operator ``<<``"""
         try:
-            return self._quantity_class(other, self, copy=COPY_IF_NEEDED, subok=True)
+            return self._quantity_class(other, self, copy=False, subok=True)
         except Exception:
             return NotImplemented
 
@@ -389,7 +378,7 @@ class FunctionUnitBase(metaclass=ABCMeta):
     def __pos__(self):
         return self._copy()
 
-    def to_string(self, format="generic", **kwargs):
+    def to_string(self, format="generic"):
         """
         Output the unit in the given format as a string.
 
@@ -398,55 +387,26 @@ class FunctionUnitBase(metaclass=ABCMeta):
 
         Parameters
         ----------
-        format : `astropy.units.format.Base` subclass or str
-            The name of a format or a formatter class.  If not
+        format : `astropy.units.format.Base` instance or str
+            The name of a format or a formatter object.  If not
             provided, defaults to the generic format.
         """
-        supported_formats = (
-            "generic",
-            "latex",
-            "latex_inline",
-            "unicode",
-            "console",
-        )
-        if format not in supported_formats:
+        if format not in ("generic", "unscaled", "latex", "latex_inline"):
             raise ValueError(
                 f"Function units cannot be written in {format} "
-                f"format. Only {', '.join(supported_formats)} are supported."
+                "format. Only 'generic', 'unscaled', 'latex' and "
+                "'latex_inline' are supported."
             )
-        self_str = self.function_unit.to_string(format, **kwargs)
-        pu_str = self.physical_unit.to_string(format, **kwargs)
+        self_str = self.function_unit.to_string(format)
+        pu_str = self.physical_unit.to_string(format)
         if pu_str == "":
             pu_str = "1"
         if format.startswith("latex"):
-            # Add the physical unit with parentheses, removing its latex
-            # initialization stuff ("$\mathrm{" and "}$").
-            # For self_str, remove trailing "}$" and put it back at the end.
-            self_str = rf"{self_str[:-2]}\left({pu_str[9:-2]}\right)}}$"
+            # need to strip leading and trailing "$"
+            self_str += rf"$\mathrm{{\left( {pu_str[1:-1]} \right)}}$"
         else:
-            pu_lines = pu_str.splitlines()
-            if len(pu_lines) == 1:
-                self_str += f"({pu_str})"
-            else:
-                # If the physical unit is formatted into a multiline
-                # string, the lines need to be adjusted so that the
-                # functional string is aligned with the fraction line
-                # (second one), and all other lines are indented
-                # accordingly.
-                f = f"{{0:^{len(self_str) + 1}s}}{{1:s}}"
-                lines = [
-                    f.format("", pu_lines[0]),
-                    f.format(f"{self_str}(", f"{pu_lines[1]})"),
-                ] + [f.format("", line) for line in pu_lines[2:]]
-                self_str = "\n".join(lines)
+            self_str += f"({pu_str})"
         return self_str
-
-    def __format__(self, format_spec):
-        """Try to format units using a formatter."""
-        try:
-            return self.to_string(format=format_spec)
-        except ValueError:
-            return format(str(self), format_spec)
 
     def __str__(self):
         """Return string representation for unit."""
@@ -583,7 +543,7 @@ class FunctionQuantity(Quantity):
                 # if iterable, see if first item has a unit
                 # (mixed lists fail in super call below).
                 try:
-                    value_unit = value[0].unit
+                    value_unit = getattr(value[0], "unit")
                 except Exception:
                     pass
             physical_unit = getattr(value_unit, "physical_unit", value_unit)
@@ -626,7 +586,7 @@ class FunctionQuantity(Quantity):
         """Return a copy with the physical unit in CGS units."""
         return self.__class__(self.physical.cgs)
 
-    def decompose(self, bases: Collection[UnitBase] = ()) -> Self:
+    def decompose(self, bases=[]):
         """Generate a new instance with the physical unit decomposed.
 
         For details, see `~astropy.units.Quantity.decompose`.
@@ -709,8 +669,7 @@ class FunctionQuantity(Quantity):
     def _comparison(self, other, comparison_func):
         """Do a comparison between self and other, raising UnitsError when
         other cannot be converted to self because it has different physical
-        unit, and returning NotImplemented when there are other errors.
-        """
+        unit, and returning NotImplemented when there are other errors."""
         try:
             # will raise a UnitsError if physical units not equivalent
             other_in_own_unit = self._to_own_unit(other, check_precision=False)
@@ -755,7 +714,7 @@ class FunctionQuantity(Quantity):
         return self._comparison(other, self.value.__le__)
 
     def __lshift__(self, other):
-        """Unit conversion operator `<<`."""
+        """Unit conversion operator `<<`"""
         try:
             other = Unit(other, parse_strict="silent")
         except UnitTypeError:

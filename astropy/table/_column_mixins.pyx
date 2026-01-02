@@ -25,10 +25,6 @@ Column is itself an array.
 import sys
 
 import numpy as np
-cimport numpy as np
-from cpython.ref cimport PyTypeObject
-
-np.import_array()
 
 
 cdef tuple INTEGER_TYPES = (int, np.integer)
@@ -42,17 +38,26 @@ ctypedef object (*binaryfunc)(object, object)
 
 
 cdef extern from "Python.h":
-    void *PyType_GetSlot(PyTypeObject *type, int slot)
-    int Py_mp_subscript
+    ctypedef struct PyMappingMethods:
+        binaryfunc mp_subscript
+
+    ctypedef struct PyTypeObject:
+        PyMappingMethods* tp_as_mapping
+
+
+cdef extern from "numpy/arrayobject.h":
+    ctypedef class numpy.ndarray [object PyArrayObject]:
+        cdef int ndim "nd"
+
 
 ctypedef object (*item_getter)(object, object)
 
 
 cdef inline object base_getitem(object self, object item, item_getter getitem):
-    if (<np.ndarray>self).ndim > 1 and isinstance(item, INTEGER_TYPES):
+    if (<ndarray>self).ndim > 1 and isinstance(item, INTEGER_TYPES):
         return self.data[item]
 
-    dtype_kind = (<np.ndarray>self).dtype.kind
+    dtype_kind = (<ndarray>self).dtype.kind
     if dtype_kind == 'V' and isinstance(item, STRING_TYPES):
         return self.data[item]
 
@@ -68,7 +73,7 @@ cdef inline object base_getitem(object self, object item, item_getter getitem):
 
 
 cdef inline object column_getitem(object self, object item):
-    return (<binaryfunc>PyType_GetSlot(<PyTypeObject *>np.ndarray, Py_mp_subscript))(self, item)
+    return (<PyTypeObject *>ndarray).tp_as_mapping.mp_subscript(self, item)
 
 
 cdef class _ColumnGetitemShim:

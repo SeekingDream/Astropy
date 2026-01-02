@@ -9,7 +9,7 @@
 #include "pyutil.h"
 #include "sip.h"
 
-extern PyObject* PySipType;
+extern PyTypeObject PySipType;
 
 typedef struct {
   PyObject_HEAD

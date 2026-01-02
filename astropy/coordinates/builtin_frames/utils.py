@@ -39,7 +39,7 @@ _DEFAULT_PM = (0.035, 0.29) * u.arcsec
 
 def get_polar_motion(time):
     """
-    gets the two polar motion components in radians for use with apio.
+    gets the two polar motion components in radians for use with apio
     """
     # Get the polar motion from the IERS table
     iers_table = iers.earth_orientation_table.get()
@@ -69,7 +69,7 @@ def get_polar_motion(time):
 
 def _warn_iers(ierserr):
     """
-    Generate a warning for an IERSRangeerror.
+    Generate a warning for an IERSRangeerror
 
     Parameters
     ----------
@@ -215,7 +215,7 @@ def aticq(srepr, astrom):
 
     # Aberration, giving GCRS natural direction
     d = np.zeros_like(ppr)
-    for _ in range(2):
+    for j in range(2):
         before = norm(ppr - d)
         after = erfa.ab(before, astrom["v"], astrom["em"], astrom["bm1"])
         d = after - before
@@ -223,7 +223,7 @@ def aticq(srepr, astrom):
 
     # Light deflection by the Sun, giving BCRS coordinate direction
     d = np.zeros_like(pnat)
-    for _ in range(5):
+    for j in range(5):
         before = norm(pnat - d)
         if ignore_distance:
             # No distance to object, assume a long way away
@@ -330,7 +330,7 @@ def atciqz(srepr, astrom):
 
 def prepare_earth_position_vel(time):
     """
-    Get barycentric position and velocity, and heliocentric position of Earth.
+    Get barycentric position and velocity, and heliocentric position of Earth
 
     Parameters
     ----------

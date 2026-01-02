@@ -35,13 +35,13 @@ class AxisLabels(Text):
             return self._minpad
 
     def set_visible_axes(self, visible_axes):
-        self._visible_axes = self._frame._validate_positions(visible_axes)
+        self._visible_axes = visible_axes
 
     def get_visible_axes(self):
         if self._visible_axes == "all":
-            return list(self._frame.keys())
+            return self._frame.keys()
         else:
-            return [x for x in self._visible_axes if x in self._frame or x == "#"]
+            return [x for x in self._visible_axes if x in self._frame]
 
     def set_minpad(self, minpad):
         self._minpad = minpad
@@ -50,7 +50,7 @@ class AxisLabels(Text):
         allowed = ["always", "labels", "ticks"]
         if value not in allowed:
             raise ValueError(
-                f"Axis label visibility rule must be one of {' / '.join(allowed)}"
+                f"Axis label visibility rule must be one of{' / '.join(allowed)}"
             )
 
         self._visibility_rule = value
@@ -78,9 +78,6 @@ class AxisLabels(Text):
                 ticklabels_bbox_list += bbaxis
 
         for axis in self.get_visible_axes():
-            if axis == "#":
-                continue
-
             if self.get_visibility_rule() == "ticks":
                 if not ticks_locs[axis]:
                     continue

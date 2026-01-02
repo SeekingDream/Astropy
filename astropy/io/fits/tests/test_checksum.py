@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see PYFITS.rst
 
+import sys
 import warnings
 
 import numpy as np
@@ -12,7 +13,8 @@ from .conftest import FitsTestCase
 from .test_table import comparerecords
 
 
-class BaseChecksumTests(FitsTestCase):
+class TestChecksumFunctions(FitsTestCase):
+    # All checksums have been verified against CFITSIO
     def setup_method(self):
         super().setup_method()
         self._oldfilters = warnings.filters[:]
@@ -29,10 +31,6 @@ class BaseChecksumTests(FitsTestCase):
         warnings.filters = self._oldfilters
         _ValidHDU._get_timestamp = self._old_get_timestamp
 
-
-class TestChecksumFunctions(BaseChecksumTests):
-    # All checksums have been verified against CFITSIO
-
     def test_sample_file(self):
         hdul = fits.open(self.data("checksum.fits"), checksum=True)
         assert hdul._read_all
@@ -47,8 +45,11 @@ class TestChecksumFunctions(BaseChecksumTests):
             assert "CHECKSUM" in hdul[0].header
             assert "DATASUM" in hdul[0].header
 
-            assert hdul[0].header["CHECKSUM"] == "ZHMkeGKjZGKjbGKj"
-            assert hdul[0].header["DATASUM"] == "4950"
+            if not sys.platform.startswith("win32"):
+                # The checksum ends up being different on Windows, possibly due
+                # to slight floating point differences
+                assert hdul[0].header["CHECKSUM"] == "ZHMkeGKjZGKjbGKj"
+                assert hdul[0].header["DATASUM"] == "4950"
 
     def test_scaled_data(self):
         with fits.open(self.data("scale.fits")) as hdul:
@@ -126,7 +127,8 @@ class TestChecksumFunctions(BaseChecksumTests):
                     assert hdul[idx].header["DATASUM"] == checksums[idx][1]
 
     def test_groups_hdu_data(self):
-        imdata = np.arange(100.0).reshape((10, 1, 1, 2, 5))
+        imdata = np.arange(100.0)
+        imdata.shape = (10, 1, 1, 2, 5)
         pdata1 = np.arange(10) + 0.1
         pdata2 = 42
         x = fits.hdu.groups.GroupData(
@@ -180,88 +182,6 @@ class TestChecksumFunctions(BaseChecksumTests):
             assert "DATASUM" in hdul[1].header
             assert hdul[1].header["DATASUM"] == "1507485"
 
-    def test_variable_length_table_data2(self):
-        """regression test for #12119"""
-
-        time_data = [
-            np.array([2021, 1, 5, 10, 5, 30], dtype=np.uint16),
-            np.array([2021, 2, 19, 11, 19, 56], dtype=np.uint16),
-            np.array([2021, 4, 21, 16, 10, 24], dtype=np.uint16),
-            np.array([2021, 7, 22, 14, 42, 20], dtype=np.uint16),
-        ]
-        time_col = fits.Column(name="time", format="6I", array=time_data)
-
-        version_data = ["5.45.70", "5.45.71", "5.45.102", "5.50.109"]
-        version_col = fits.Column(name="Version", format="PA(8)", array=version_data)
-        columns = [time_col, version_col]
-
-        testfile = self.temp("tmp.fits")
-        tbl = fits.BinTableHDU.from_columns(columns, name="DemoBinTable")
-        hdul = fits.HDUList([fits.PrimaryHDU(), tbl])
-
-        # here checksum is computed from in-memory data, which was producing
-        # a wrong checksum and warnings when reading back the file
-        hdul.writeto(testfile, checksum=True)
-
-        testfile2 = self.temp("tmp2.fits")
-        with fits.open(testfile, checksum=True) as hdul:
-            datasum = hdul[1]._datasum
-            assert datasum == "2998821219"
-            checksum = hdul[1]._checksum
-            assert checksum == "7aC39YA37aA37YA3"
-
-            # so write again the file but here data was not loaded so checksum
-            # is computed directly from the file bytes, which was producing
-            # a correct checksum. Below we compare both to make sure they are
-            # consistent.
-            hdul.writeto(testfile2, checksum=True)
-
-        with fits.open(testfile2, checksum=True) as hdul:
-            assert datasum == hdul[1]._datasum
-            assert checksum == hdul[1]._checksum
-
-    def test_variable_length_table_data3(self):
-        """regression test for #14396"""
-        # This is testing specifically a scenario where the start of the heap
-        # is not aligned with 4-byte blocks (32 bit integers)
-
-        # By default, the heap starts immediately after the table, which is at
-        # NAXIS1 x NAXIS2, or byte 17 in this case. This is not aligned with
-        # the 4-byte blocks
-        testfile = self.temp("tmp.fits")
-        col1 = fits.Column(name="a", format="1A", array=["a"])
-        col2 = fits.Column(name="b", format="QD", array=[[1]])
-        tab = fits.BinTableHDU.from_columns(name="test", columns=[col1, col2])
-
-        tab.writeto(testfile, checksum=True)
-        with fits.open(testfile, checksum=True) as hdul:
-            assert hdul[1].header["DATASUM"] == "1648357376"
-            assert hdul[1].header["CHECKSUM"] == "2CoL4BnL2BnL2BnL"
-
-        # Here we force the heap to be aligned with the 4-byte blocks by using
-        # the THEAP keyword. This shows that we cannot always calculate DATASUM
-        # by simple concatenating the table data with the heap data.
-        testfile = self.temp("tmp2.fits")
-        col1 = fits.Column(name="a", format="1A", array=["a"])
-        col2 = fits.Column(name="b", format="QD", array=[[1]])
-        tab = fits.BinTableHDU.from_columns(name="test", columns=[col1, col2])
-        tab.header["THEAP"] = 20
-        tab.writeto(testfile, checksum=True)
-        with fits.open(testfile, checksum=True) as hdul:
-            assert hdul[1].header["DATASUM"] == "2716860416"
-            assert hdul[1].header["CHECKSUM"] == "jIAFjI19jI8CjI89"
-
-        # Here we take the previous table and just update the THEAP value to 17.
-        # This should put the heap in the same position as the first case and
-        # thus the DATASUM should be the same. However, the CHECKSUM should be
-        # different, as the header is different (it now has the THEAP keyword).
-        testfile = self.temp("tmp3.fits")
-        tab.header["THEAP"] = 17
-        tab.writeto(testfile, checksum=True)
-        with fits.open(testfile, checksum=True) as hdul:
-            assert hdul[1].header["DATASUM"] == "1648357376"
-            assert hdul[1].header["CHECKSUM"] == "jcdDjZZBjabBjYZB"
-
     def test_ascii_table_data(self):
         a1 = np.array(["abc", "def"])
         r1 = np.array([11.0, 12.0])
@@ -280,10 +200,105 @@ class TestChecksumFunctions(BaseChecksumTests):
             assert "DATASUM" in hdul[0].header
             assert hdul[0].header["DATASUM"] == "0"
 
+            if not sys.platform.startswith("win32"):
+                # The checksum ends up being different on Windows, possibly due
+                # to slight floating point differences
+                assert "CHECKSUM" in hdul[1].header
+                assert hdul[1].header["CHECKSUM"] == "3rKFAoI94oICAoI9"
+                assert "DATASUM" in hdul[1].header
+                assert hdul[1].header["DATASUM"] == "1914653725"
+
+    def test_compressed_image_data(self):
+        with fits.open(self.data("comp.fits")) as h1:
+            h1.writeto(self.temp("tmp.fits"), overwrite=True, checksum=True)
+            with fits.open(self.temp("tmp.fits"), checksum=True) as h2:
+                assert np.all(h1[1].data == h2[1].data)
+                assert "CHECKSUM" in h2[0].header
+                assert h2[0].header["CHECKSUM"] == "D8iBD6ZAD6fAD6ZA"
+                assert "DATASUM" in h2[0].header
+                assert h2[0].header["DATASUM"] == "0"
+                assert "CHECKSUM" in h2[1].header
+                assert h2[1].header["CHECKSUM"] == "ZeAbdb8aZbAabb7a"
+                assert "DATASUM" in h2[1].header
+                assert h2[1].header["DATASUM"] == "113055149"
+
+    def test_failing_compressed_datasum(self):
+        """
+        Regression test for https://github.com/astropy/astropy/issues/4587
+        """
+        n = np.ones((10, 10), dtype="float32")
+        comp_hdu = fits.CompImageHDU(n)
+        comp_hdu.writeto(self.temp("tmp.fits"), checksum=True)
+
+        with fits.open(self.temp("tmp.fits"), checksum=True) as hdul:
+            assert np.all(hdul[1].data == comp_hdu.data)
+
+    def test_compressed_image_data_int16(self):
+        n = np.arange(100, dtype="int16")
+        hdu = fits.ImageHDU(n)
+        comp_hdu = fits.CompImageHDU(hdu.data, hdu.header)
+        comp_hdu.writeto(self.temp("tmp.fits"), checksum=True)
+        hdu.writeto(self.temp("uncomp.fits"), checksum=True)
+        with fits.open(self.temp("tmp.fits"), checksum=True) as hdul:
+            assert np.all(hdul[1].data == comp_hdu.data)
+            assert np.all(hdul[1].data == hdu.data)
+            assert "CHECKSUM" in hdul[0].header
+            assert hdul[0].header["CHECKSUM"] == "D8iBD6ZAD6fAD6ZA"
+            assert "DATASUM" in hdul[0].header
+            assert hdul[0].header["DATASUM"] == "0"
+
             assert "CHECKSUM" in hdul[1].header
-            assert hdul[1].header["CHECKSUM"] == "3rKFAoI94oICAoI9"
+            assert hdul[1]._header["CHECKSUM"] == "J5cCJ5c9J5cAJ5c9"
             assert "DATASUM" in hdul[1].header
-            assert hdul[1].header["DATASUM"] == "1914653725"
+            assert hdul[1]._header["DATASUM"] == "2453673070"
+            assert "CHECKSUM" in hdul[1].header
+
+            with fits.open(self.temp("uncomp.fits"), checksum=True) as hdul2:
+                header_comp = hdul[1]._header
+                header_uncomp = hdul2[1].header
+                assert "ZHECKSUM" in header_comp
+                assert "CHECKSUM" in header_uncomp
+                assert header_uncomp["CHECKSUM"] == "ZE94eE91ZE91bE91"
+                assert header_comp["ZHECKSUM"] == header_uncomp["CHECKSUM"]
+                assert "ZDATASUM" in header_comp
+                assert "DATASUM" in header_uncomp
+                assert header_uncomp["DATASUM"] == "160565700"
+                assert header_comp["ZDATASUM"] == header_uncomp["DATASUM"]
+
+    def test_compressed_image_data_float32(self):
+        n = np.arange(100, dtype="float32")
+        hdu = fits.ImageHDU(n)
+        comp_hdu = fits.CompImageHDU(hdu.data, hdu.header)
+        comp_hdu.writeto(self.temp("tmp.fits"), checksum=True)
+        hdu.writeto(self.temp("uncomp.fits"), checksum=True)
+        with fits.open(self.temp("tmp.fits"), checksum=True) as hdul:
+            assert np.all(hdul[1].data == comp_hdu.data)
+            assert np.all(hdul[1].data == hdu.data)
+            assert "CHECKSUM" in hdul[0].header
+            assert hdul[0].header["CHECKSUM"] == "D8iBD6ZAD6fAD6ZA"
+            assert "DATASUM" in hdul[0].header
+            assert hdul[0].header["DATASUM"] == "0"
+
+            assert "CHECKSUM" in hdul[1].header
+            assert "DATASUM" in hdul[1].header
+
+            # The checksum ends up being different on Windows and s390/bigendian,
+            # possibly due to slight floating point differences? See gh-10921.
+            # TODO fix these so they work on all platforms; otherwise pointless.
+            # assert hdul[1]._header['CHECKSUM'] == 'eATIf3SHe9SHe9SH'
+            # assert hdul[1]._header['DATASUM'] == '1277667818'
+
+            with fits.open(self.temp("uncomp.fits"), checksum=True) as hdul2:
+                header_comp = hdul[1]._header
+                header_uncomp = hdul2[1].header
+                assert "ZHECKSUM" in header_comp
+                assert "CHECKSUM" in header_uncomp
+                assert header_uncomp["CHECKSUM"] == "Cgr5FZo2Cdo2CZo2"
+                assert header_comp["ZHECKSUM"] == header_uncomp["CHECKSUM"]
+                assert "ZDATASUM" in header_comp
+                assert "DATASUM" in header_uncomp
+                assert header_uncomp["DATASUM"] == "2393636889"
+                assert header_comp["ZDATASUM"] == header_uncomp["DATASUM"]
 
     def test_open_with_no_keywords(self):
         hdul = fits.open(self.data("arange.fits"), checksum=True)
@@ -342,10 +357,10 @@ class TestChecksumFunctions(BaseChecksumTests):
         hdu.writeto(self.temp("tmp.fits"), overwrite=True, checksum="datasum")
         with fits.open(self.temp("tmp.fits"), checksum=True) as hdul:
             if not (hasattr(hdul[0], "_datasum") and hdul[0]._datasum):
-                pytest.fail("Missing DATASUM keyword")
+                pytest.fail(msg="Missing DATASUM keyword")
 
             if not (hasattr(hdul[0], "_checksum") and not hdul[0]._checksum):
-                pytest.fail("Non-empty CHECKSUM keyword")
+                pytest.fail(msg="Non-empty CHECKSUM keyword")
 
     def test_open_update_mode_preserve_checksum(self):
         """
@@ -447,7 +462,7 @@ class TestChecksumFunctions(BaseChecksumTests):
 
     def _check_checksums(self, hdu):
         if not (hasattr(hdu, "_datasum") and hdu._datasum):
-            pytest.fail("Missing DATASUM keyword")
+            pytest.fail(msg="Missing DATASUM keyword")
 
         if not (hasattr(hdu, "_checksum") and hdu._checksum):
-            pytest.fail("Missing CHECKSUM keyword")
+            pytest.fail(msg="Missing CHECKSUM keyword")

@@ -2,7 +2,6 @@
 
 from astropy.coordinates.attributes import EarthLocationAttribute, TimeAttribute
 from astropy.coordinates.baseframe import BaseCoordinateFrame, base_doc
-from astropy.coordinates.earth import EarthLocation
 from astropy.coordinates.representation import (
     CartesianDifferential,
     CartesianRepresentation,
@@ -68,24 +67,18 @@ class ITRS(BaseCoordinateFrame):
     default_representation = CartesianRepresentation
     default_differential = CartesianDifferential
 
-    obstime = TimeAttribute(
-        default=DEFAULT_OBSTIME, doc="The reference time (e.g., time of observation)"
-    )
-    location = EarthLocationAttribute(
-        default=EARTH_CENTER, doc="The location on Earth of the observer"
-    )
+    obstime = TimeAttribute(default=DEFAULT_OBSTIME)
+    location = EarthLocationAttribute(default=EARTH_CENTER)
 
     @property
     def earth_location(self):
         """
         The data in this frame as an `~astropy.coordinates.EarthLocation` class.
         """
+        from astropy.coordinates.earth import EarthLocation
+
         cart = self.represent_as(CartesianRepresentation)
-        return EarthLocation(
-            x=cart.x + self.location.x,
-            y=cart.y + self.location.y,
-            z=cart.z + self.location.z,
-        )
+        return EarthLocation(x=cart.x, y=cart.y, z=cart.z)
 
 
 # Self-transform is in intermediate_rotation_transforms.py with all the other

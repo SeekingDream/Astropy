@@ -5,9 +5,6 @@
 
 #define NO_IMPORT_ARRAY
 
-#include <stdlib.h> // calloc, malloc, free
-#include <string.h> // memset, strlen, strncpy
-
 #include "astropy_wcs/wcslib_wrap.h"
 #include "astropy_wcs/wcslib_auxprm_wrap.h"
 #include "astropy_wcs/wcslib_prjprm_wrap.h"
@@ -167,62 +164,6 @@ convert_rejections_to_warnings() {
   return status;
 }
 
-PyObject* get_scaled_double_array_readonly(
-    /*@unused@*/ const char* propname,
-    double* value,
-    double *scale,
-    const npy_intp naxis,
-    const npy_intp* dims,
-    /*@shared@*/ PyObject* owner) {
-
-  /*
-  This function is equivalent to get_double_array_readonly except that values
-  can be scaled before constructing the final array. The input parameters are as
-  in get_double_array_readonly except for the addition of scale which should be
-  an array of scalefactors with length dims[0] - the number of coordinate axes.
-  For now this supports only 1D or 2D arrays, as we do not need support for
-  higher dimensions.
-  */
-
-  PyArrayObject* array;
-
-  array = (PyArrayObject*)PyArray_SimpleNew(naxis, dims, NPY_DOUBLE);
-  if (array == NULL) {
-    return NULL;
-  }
-
-  double *array_data = (double *)PyArray_DATA(array);
-
-  if (naxis == 1) {
-    for (npy_intp i = 0; i < dims[0]; ++i) {
-      array_data[i] = value[i] / scale[i];
-    }
-  } else if (naxis == 2) {
-    for (npy_intp i = 0; i < dims[0]; ++i) {
-      for (npy_intp j = 0; j < dims[1]; ++j) {
-        array_data[i * dims[1] + j] = value[i * dims[1] + j] / scale[i];
-      }
-    }
-  } else {
-    return NULL;
-  }
-
-  // Make the array read-only
-  PyArray_CLEARFLAGS(array, NPY_ARRAY_WRITEABLE);
-
-  return (PyObject*)array;
-
-}
-
-int cunit_empty(const char cunit[][72], int naxis) {
-  /* This function returns 0 if all the cunit values are empty, and 1 otherwise */
-  for (int i = 0; i < naxis; ++i) {
-      if (strcmp(cunit[i], "") != 0) {
-        return 0;
-      }
-  }
-  return 1;
-}
 
 /***************************************************************************
  * wtbarr-related global variables and functions                           *
@@ -274,7 +215,7 @@ int _update_wtbarr_from_hdulist(PyObject *hdulist, struct wtbarr *wtb) {
     return 0;
   }
 
-  if (!PyArray_Check((PyObject*)arrayp)) {
+  if (!PyArray_Check(arrayp)) {
     PyErr_SetString(PyExc_TypeError,
                     "wtbarr callback must return a numpy.ndarray type "
                     "coordinate or index array.");
@@ -354,7 +295,7 @@ int _update_wtbarr_from_hdulist(PyObject *hdulist, struct wtbarr *wtb) {
  * PyWcsprm methods
  */
 
-int
+static int
 PyWcsprm_cset(PyWcsprm* self, const int convert);
 
 static INLINE void
@@ -367,18 +308,13 @@ PyWcsprm_dealloc(
     PyWcsprm* self) {
 
   wcsfree(&self->x);
-  PyTypeObject *tp = Py_TYPE((PyObject*)self);
-  freefunc free_func = PyType_GetSlot(tp, Py_tp_free);
-  free_func((PyObject*)self);
-  Py_DECREF(tp);
+  Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 static PyWcsprm*
 PyWcsprm_cnew(void) {
   PyWcsprm* self;
-  PyTypeObject* type = (PyTypeObject*)PyWcsprmType;
-  allocfunc alloc_func = PyType_GetSlot(type, Py_tp_alloc);
-  self = (PyWcsprm*)alloc_func(type, 0);
+  self = (PyWcsprm*)(&PyWcsprmType)->tp_alloc(&PyWcsprmType, 0);
   return self;
 }
 
@@ -389,8 +325,7 @@ PyWcsprm_new(
     /*@unused@*/ PyObject* kwds) {
 
   PyWcsprm* self;
-  allocfunc alloc_func = PyType_GetSlot(type, Py_tp_alloc);
-  self = (PyWcsprm*)alloc_func(type, 0);
+  self = (PyWcsprm*)type->tp_alloc(type, 0);
   return (PyObject*)self;
 }
 
@@ -420,20 +355,15 @@ PyWcsprm_init(
   int            nwcs          = 0;
   struct wcsprm* wcs           = NULL;
   int            i, j;
-  int            preserve_units = 0;
   const char*    keywords[]    = {"header", "key", "relax", "naxis", "keysel",
-                                  "colsel", "warnings", "hdulist", "preserve_units", NULL};
+                                  "colsel", "warnings", "hdulist", NULL};
 
   if (!PyArg_ParseTupleAndKeywords(
-          args, kwds, "|OsOiiOiOp:WCSBase.__init__",
+          args, kwds, "|OsOiiOiO:WCSBase.__init__",
           (char **)keywords, &header_obj, &key, &relax_obj, &naxis, &keysel,
-          &colsel, &warnings, &hdulist, &preserve_units)) {
+          &colsel, &warnings, &hdulist)) {
     return -1;
   }
-
-  // The user can optionally choose to preserve the original units rather
-  // than use the units WCSLIB converts to (e.g. arcsec -> deg)
-  self->preserve_units = preserve_units;
 
   if (header_obj == NULL || header_obj == Py_None) {
     if (keysel > 0) {
@@ -700,7 +630,8 @@ PyWcsprm_copy(
     PyWcsprm* self) {
 
   PyWcsprm*     copy = NULL;
-  int           status;
+  int           status, nelem, i, j, ndim;
+  struct wtbarr *wtb, *wtb0;
 
   copy = PyWcsprm_cnew();
   if (copy == NULL) {
@@ -713,79 +644,19 @@ PyWcsprm_copy(
   status = wcscopy(1, &self->x, &copy->x);
   wcsprm_c2python(&self->x);
 
-  // Also copy over any information related to preserving units
-
-  copy->preserve_units = self->preserve_units;
-
-  if (self->original_cunit != NULL) {
-    copy->original_cunit = malloc(copy->x.naxis * sizeof(*copy->original_cunit));
-    if (self->original_cunit == NULL) {
-        PyErr_NoMemory();
-        return NULL;
-    }
-    for (int i = 0; i < copy->x.naxis; ++i) {
-        strncpy(copy->original_cunit[i], self->original_cunit[i], 72);
-    }
-  }
-
-  if (self->unit_scaling != NULL) {
-      copy->unit_scaling = malloc(copy->x.naxis * sizeof(double));
-      if (copy->unit_scaling == NULL) {
-          PyErr_NoMemory();
-          return NULL;
-      }
-    for (int i = 0; i < copy->x.naxis; ++i) {
-        copy->unit_scaling[i] = self->unit_scaling[i];
-    }
-  }
-
-
   if (status == 0) {
     if (PyWcsprm_cset(copy, 0)) {
-      Py_XDECREF((PyObject*)copy);
+      Py_XDECREF(copy);
       return NULL;
     }
 
     wcsprm_c2python(&copy->x);
     return (PyObject*)copy;
   } else {
-    Py_XDECREF((PyObject*)copy);
+    Py_XDECREF(copy);
     wcs_to_python_exc(&(self->x));
     return NULL;
   }
-}
-
-static PyWcsprm* PyWcsprm_copy_with_patched_units(PyWcsprm* source) {
-
-    // This function returns a copy of a PyWcsprm with units patched
-    // to match the original units (before WCSLIB changed them). The
-    // returned object should not be used to do any kind of transformations
-    // and is only for use in e.g. converting to a header, or printing
-    // contents.
-
-    int original_flag;
-    PyWcsprm* copy = (PyWcsprm*)PyWcsprm_copy(source);
-
-    // We make sure wcsset is happy
-    wcsset(&copy->x);
-
-    // We preserve the value of the flag which indicates that wcsset
-    // has been called and there have been no further modifications
-    original_flag = copy->x.flag;
-
-    // We now override the unit, cdelt and crval values
-    for (int i = 0; i < copy->x.naxis; ++i) {
-      strncpy(copy->x.cunit[i], source->original_cunit[i], 72);
-      copy->x.cdelt[i] /= source->unit_scaling[i];
-      copy->x.crval[i] /= source->unit_scaling[i];
-    }
-
-    // We restore the flag to trick WCSLIB into thinking it no longer
-    // needs to change the units.
-    copy->x.flag = original_flag;
-
-    return copy;
-
 }
 
 PyObject*
@@ -996,7 +867,7 @@ PyWcsprm_compare(
 
   if (!PyArg_ParseTupleAndKeywords(
           args, kwds, "O!|id:compare", (char **)keywords,
-          (PyTypeObject*)PyWcsprmType, &other, &cmp, &tolerance)) {
+          &PyWcsprmType, &other, &cmp, &tolerance)) {
     return NULL;
   }
 
@@ -1059,7 +930,7 @@ PyWcsprm_cylfix(
   status = cylfix(naxis, &self->x);
   wcsprm_c2python(&self->x);
 
-  Py_XDECREF((PyObject*)naxis_array);
+  Py_XDECREF(naxis_array);
 
   if (status == -1 || status == 0) {
     return PyLong_FromLong((long)status);
@@ -1086,89 +957,6 @@ PyWcsprm_datfix(
     return NULL;
   }
 }
-
-int initialize_preserve_units(PyWcsprm* self) {
-
-  // If the user has requested to preserve units, we keep track of what CUNIT
-  // was before and after fixing so that we can store the scaling factor if
-  // needed. However, we don't do this yet if the units have not been set.
-  if (self->preserve_units == 1 && !cunit_empty(self->x.cunit, self->x.naxis)) {
-
-    if (self->original_cunit == NULL) {
-      self->original_cunit = malloc(self->x.naxis * sizeof(*self->original_cunit));
-      if (self->original_cunit == NULL) {
-          PyErr_NoMemory();
-          return -1;
-      }
-      for (int i = 0; i < self->x.naxis; ++i) {
-          strncpy(self->original_cunit[i], self->x.cunit[i], 72);
-      }
-    }
-
-  }
-
-  return 0;
-
-}
-
-int check_unit_changes(PyWcsprm* self) {
-
-  double         scale, offset, power;
-  int            status;
-
-  // Check which units have changed, and store scaling if changed.
-  if (self->original_cunit != NULL) {
-
-    if (self->unit_scaling == NULL) {
-      self->unit_scaling = malloc(self->x.naxis * sizeof(double));
-      if (self->unit_scaling == NULL) {
-          PyErr_NoMemory();
-          return -1;
-      }
-    }
-
-    for (int i = 0; i < self->x.naxis; ++i) {
-      if (strcmp(self->original_cunit[i], self->x.cunit[i]) != 0) {
-        status = wcsunits(self->original_cunit[i], self->x.cunit[i], &scale, &offset, &power);
-        if (status == 0) {
-          // We don't support offset and power currently because it should not be needed,
-          // and would introduce additional complexity. However, if needed this can be
-          // supported in future.
-          if (offset != 0 || power != 1)
-                PyErr_Format(
-                  PyExc_ValueError,
-                 "Preserving original units with non-trivial offset and power is not supported "
-                );
-          self->unit_scaling[i] = scale;
-        }
-      } else {
-        self->unit_scaling[i] = 1.0;
-      }
-
-    }
-
-    // We now check if all the scales are 1. If so, then we actually deallocate the array
-    // again to not waste time doing unit conversions subsequently. It might seem wasteful
-    // to allocate the array and then deallocate it, but the other option would be to
-    // allocate a temporary array for the scales in this function and then only if all the
-    // values are not 1 allocate self->unit_scaling, but then we'd be doing two allocations.
-
-    int scaling_needed = 0;
-    for (int i = 0; i < self->x.naxis; ++i) {
-        if (self->unit_scaling[i] != 1.0) {
-            scaling_needed = 1;
-            break;
-        }
-    }
-    if (!scaling_needed) {
-      free(self->unit_scaling);
-      self->unit_scaling = NULL;
-    }
-
-  }
-  return 0;
-}
-
 
 /*@null@*/ static PyObject*
 PyWcsprm_fix(
@@ -1238,17 +1026,13 @@ PyWcsprm_fix(
 
   memset(err, 0, sizeof(struct wcserr) * NWCSFIX);
 
-  initialize_preserve_units(self);
-
   wcsprm_python2c(&self->x);
   wcsfixi(ctrl, naxis, &self->x, stat, err);
   wcsprm_c2python(&self->x);
 
-  check_unit_changes(self);
-
   /* We're done with this already, so deref now so we don't have to remember
      later */
-  Py_XDECREF((PyObject*)naxis_array);
+  Py_XDECREF(naxis_array);
 
   result = PyDict_New();
   if (result == NULL) {
@@ -1285,7 +1069,6 @@ PyWcsprm_get_cdelt_func(
     /*@unused@*/ PyObject* kwds) {
 
   Py_ssize_t naxis = 0;
-  PyObject *result;
 
   if (is_null(self->x.cdelt)) {
     return NULL;
@@ -1297,13 +1080,7 @@ PyWcsprm_get_cdelt_func(
 
   naxis = self->x.naxis;
 
-  if (self->unit_scaling != NULL) {
-    result = get_scaled_double_array_readonly("cdelt", self->x.cdelt, self->unit_scaling, 1, &naxis, (PyObject*)self);
-  } else {
-    result = get_double_array_readonly("cdelt", self->x.cdelt, 1, &naxis, (PyObject*)self);
-  }
-
-  return result;
+  return get_double_array_readonly("cdelt", self->x.cdelt, 1, &naxis, (PyObject*)self);
 }
 
 /*@null@*/ static PyObject*
@@ -1534,11 +1311,11 @@ PyWcsprm_mix(
   }
 
  exit:
-  Py_XDECREF((PyObject*)world);
-  Py_XDECREF((PyObject*)phi);
-  Py_XDECREF((PyObject*)theta);
-  Py_XDECREF((PyObject*)imgcrd);
-  Py_XDECREF((PyObject*)pixcrd);
+  Py_XDECREF(world);
+  Py_XDECREF(phi);
+  Py_XDECREF(theta);
+  Py_XDECREF(imgcrd);
+  Py_XDECREF(pixcrd);
 
   if (status == 0) {
     return result;
@@ -1590,10 +1367,7 @@ PyWcsprm_p2s(
     return NULL;
   }
 
-  ncoord = PyArray_DIM(pixcrd, 0);
-  nelem = PyArray_DIM(pixcrd, 1);
-
-  if (nelem < naxis) {
+  if (PyArray_DIM(pixcrd, 1) < naxis) {
     PyErr_Format(
       PyExc_RuntimeError,
       "Input array must be 2-dimensional, where the second dimension >= %d",
@@ -1633,16 +1407,10 @@ PyWcsprm_p2s(
     goto exit;
   }
 
-  // Here we force a call to wcsset. Normally, WCSLIB will call wcsset automatically when
-  // calling wcsp2s, but we need to call it ourselves using PyWcsprm_cset so that we can
-  // catch cases where the units might change if e.g. they are not in SI to start with.
-  /* Force a call to wcsset here*/
-  if (self->preserve_units && PyWcsprm_cset(self, 1)) {
-    return NULL;
-  }
-
   /* Make the call */
   Py_BEGIN_ALLOW_THREADS
+  ncoord = PyArray_DIM(pixcrd, 0);
+  nelem = PyArray_DIM(pixcrd, 1);
   preoffset_array(pixcrd, origin);
   wcsprm_python2c(&self->x);
   status = wcsp2s(
@@ -1672,16 +1440,6 @@ PyWcsprm_p2s(
   Py_END_ALLOW_THREADS
 
   if (status == 0 || status == 8) {
-    // Since the conversion succeeded, if user has requested to preserve units,
-    // we convert the world coordinates to the original units
-    if (self->unit_scaling != NULL) {
-      double *world_data = (double *)PyArray_DATA(world);
-      for (npy_intp i = 0; i < nelem; ++i) {
-        for (npy_intp j = 0; j < ncoord; ++j) {
-            world_data[j * nelem + i] /= self->unit_scaling[i];
-        }
-      }
-    }
     result = PyDict_New();
     if (result == NULL ||
         PyDict_SetItemString(result, "imgcrd", (PyObject*)imgcrd) ||
@@ -1694,12 +1452,12 @@ PyWcsprm_p2s(
   }
 
  exit:
-  Py_XDECREF((PyObject*)pixcrd);
-  Py_XDECREF((PyObject*)imgcrd);
-  Py_XDECREF((PyObject*)phi);
-  Py_XDECREF((PyObject*)theta);
-  Py_XDECREF((PyObject*)world);
-  Py_XDECREF((PyObject*)stat);
+  Py_XDECREF(pixcrd);
+  Py_XDECREF(imgcrd);
+  Py_XDECREF(phi);
+  Py_XDECREF(theta);
+  Py_XDECREF(world);
+  Py_XDECREF(stat);
 
   if (status == 0 || status == 8) {
     return result;
@@ -1734,7 +1492,6 @@ PyWcsprm_s2p(
   PyArrayObject* stat      = NULL;
   PyObject*      result    = NULL;
   int            status    = -1;
-  double*        world_copy = NULL;
   const char*    keywords[] = {
     "world", "origin", NULL };
 
@@ -1752,50 +1509,13 @@ PyWcsprm_s2p(
     return NULL;
   }
 
-  ncoord = (int)PyArray_DIM(world, 0);
-  nelem = (int)PyArray_DIM(world, 1);
-
-  if (nelem < naxis) {
+  if (PyArray_DIM(world, 1) < naxis) {
     PyErr_Format(
       PyExc_RuntimeError,
       "Input array must be 2-dimensional, where the second dimension >= %d",
       naxis);
     goto exit;
   }
-
-  // Here we force a call to wcsset. Normally, WCSLIB will call wcsset automatically when
-  // calling wcsp2s, but we need to call it ourselves using PyWcsprm_cset so that we can
-  // catch cases where the units might change if e.g. they are not in SI to start with.
-  /* Force a call to wcsset here*/
-
-  if (self->preserve_units && PyWcsprm_cset(self, 1)) {
-    return NULL;
-  }
-
-  // Convert world units to native WCSLIB units if needed. Here we use a check that
-  // original_cunit is allocated, because the above line does not guarantee that
-  // original_cunit will be allocated (for instance if the units are not set)
-
-  double *world_data = (double *)PyArray_DATA(world);
-
-  if (self->unit_scaling != NULL) {
-
-    world_copy = malloc(sizeof(double) * nelem * ncoord);
-    if (!world_copy) {
-      return PyErr_NoMemory();
-      return NULL;
-    }
-
-    for (npy_intp i = 0; i < nelem; ++i) {
-      for (npy_intp j = 0; j < ncoord; ++j) {
-          world_copy[j * nelem + i] = world_data[j * nelem + i] * self->unit_scaling[i];
-      }
-    }
-
-    world_data = world_copy;
-
-  }
-
 
   /* Now we allocate a bunch of numpy arrays to store the
    * results in.
@@ -1832,13 +1552,15 @@ PyWcsprm_s2p(
 
   /* Make the call */
   Py_BEGIN_ALLOW_THREADS
+  ncoord = (int)PyArray_DIM(world, 0);
+  nelem = (int)PyArray_DIM(world, 1);
   /* preoffset_array(world, origin); */
   wcsprm_python2c(&self->x);
   status = wcss2p(
       &self->x,
       ncoord,
       nelem,
-      world_data,
+      (double*)PyArray_DATA(world),
       (double*)PyArray_DATA(phi),
       (double*)PyArray_DATA(theta),
       (double*)PyArray_DATA(imgcrd),
@@ -1873,17 +1595,12 @@ PyWcsprm_s2p(
   }
 
  exit:
-
-  if (world_copy!=NULL) {
-    free(world_copy);
-  }
-
-  Py_XDECREF((PyObject*)pixcrd);
-  Py_XDECREF((PyObject*)imgcrd);
-  Py_XDECREF((PyObject*)phi);
-  Py_XDECREF((PyObject*)theta);
-  Py_XDECREF((PyObject*)world);
-  Py_XDECREF((PyObject*)stat);
+  Py_XDECREF(pixcrd);
+  Py_XDECREF(imgcrd);
+  Py_XDECREF(phi);
+  Py_XDECREF(theta);
+  Py_XDECREF(world);
+  Py_XDECREF(stat);
 
   if (status == 0 || status == 9) {
     return result;
@@ -1899,26 +1616,16 @@ PyWcsprm_s2p(
   }
 }
 
-int
+static int
 PyWcsprm_cset(
     PyWcsprm* self,
     const int convert) {
 
   int status = 0;
 
-  // We want to avoid calling wcsset whenever possible as it is not thread-safe. We use wcsenq
-  // to see if the checksum of the wcsprm elements has changed since wcsset was last called.
-  if (wcsenq(&self->x, WCSENQ_CHK)) {
-    return 0;
-  }
-
-  initialize_preserve_units(self);
-
   if (convert) wcsprm_python2c(&self->x);
   status = wcsset(&self->x);
   if (convert) wcsprm_c2python(&self->x);
-
-  check_unit_changes(self);
 
   if (status == 0) {
     return 0;
@@ -1996,18 +1703,10 @@ PyWcsprm_print_contents(
     wcsprm_c2python(&self->x);
     return NULL;
   }
-
-if (self->unit_scaling != NULL) {
-    PyWcsprm* copy = PyWcsprm_copy_with_patched_units(self);
-    wcsprt(&copy->x);
-    PyWcsprm_dealloc(copy);
-  } else {
-    wcsprt(&self->x);
-    wcsprm_c2python(&self->x);
-  }
+  wcsprt(&self->x);
+  wcsprm_c2python(&self->x);
 
   printf("%s", wcsprintf_buf());
-  fflush(stdout);
 
   Py_INCREF(Py_None);
   return Py_None;
@@ -2083,15 +1782,8 @@ PyWcsprm___str__(
     wcsprm_c2python(&self->x);
     return NULL;
   }
-
-  if (self->unit_scaling != NULL) {
-    PyWcsprm* copy = PyWcsprm_copy_with_patched_units(self);
-    wcsprt(&copy->x);
-    PyWcsprm_dealloc(copy);
-  } else {
-    wcsprt(&self->x);
-    wcsprm_c2python(&self->x);
-  }
+  wcsprt(&self->x);
+  wcsprm_c2python(&self->x);
 
   return PyUnicode_FromString(wcsprintf_buf());
 }
@@ -2104,7 +1796,7 @@ PyObject *PyWcsprm_richcompare(PyObject *a, PyObject *b, int op) {
   struct wcsprm *bx;
 
   if ((op == Py_EQ || op == Py_NE) &&
-      PyObject_TypeCheck(b, (PyTypeObject*)PyWcsprmType)) {
+      PyObject_TypeCheck(b, &PyWcsprmType)) {
     ax = &((PyWcsprm *)a)->x;
     bx = &((PyWcsprm *)b)->x;
 
@@ -2281,39 +1973,6 @@ PyWcsprm_sub(
   wcsprm_python2c(&self->x);
   status = wcssub(1, &self->x, &nsub, axes, &py_dest_wcs->x);
   wcsprm_c2python(&self->x);
-
-  // At this point, we need to copy over any relevant preserve_units
-  // information, but we need to be careful since axes may have been removed or
-  // re-ordered
-
-  py_dest_wcs->preserve_units = self->preserve_units;
-
-  // We check whether original_cunit is allocated to know whether we need to copy
-  // anything over - if it is not allocated then nothing needs to be done even
-  // if preserve_units is set.
-
-  if (self->original_cunit != NULL) {
-
-  initialize_preserve_units(py_dest_wcs);
-
-  // Now override original_unit with the actual original units from the original WCS
-
-  for (int i = 0; i < py_dest_wcs->x.naxis; ++i) {
-
-    // The axis variable has now been modified by wcssub to give the mapping
-    // from new axis to original axis, with the axis numbers being 1-based.
-    // If axis is zero, this means that the axis is a new one and we should
-    // not do anything.
-
-    if (axes[i] > 0) {
-          strncpy(py_dest_wcs->original_cunit[i], self->original_cunit[axes[i] - 1], 72);
-    }
-
-  }
-
-    check_unit_changes(py_dest_wcs);
-
-}
   if (PyWcsprm_cset(py_dest_wcs, 0)) {
     status = -1;
     goto exit;
@@ -2332,12 +1991,12 @@ PyWcsprm_sub(
   if (status == 0) {
     return (PyObject*)py_dest_wcs;
   } else if (status == -1) {
-    Py_XDECREF((PyObject*)py_dest_wcs);
+    Py_XDECREF(py_dest_wcs);
     /* Exception already set */
     return NULL;
   } else {
     wcs_to_python_exc(&(py_dest_wcs->x));
-    Py_XDECREF((PyObject*)py_dest_wcs);
+    Py_XDECREF(py_dest_wcs);
     return NULL;
   }
 }
@@ -2376,37 +2035,13 @@ PyWcsprm_to_header(
     }
   }
 
-  // If the user has requested to preserve the original units, then we
-  // could try and edit the header returned by wcshdo - however, this
-  // might be tricky and not robust to future WCSLIB changes. Instead,
-  // we make a copy of the Wcsprm object, change the units on that and
-  // prevent WCSLIB fixing the units, then convert to a header.
-  if (self->unit_scaling != NULL) {
+  wcsprm_python2c(&self->x);
+  status = wcshdo(relax, &self->x, &nkeyrec, &header);
+  wcsprm_c2python(&self->x);
 
-    PyWcsprm* copy = PyWcsprm_copy_with_patched_units(self);
-
-    wcsprm_python2c(&copy->x);
-    status = wcshdo(relax, &copy->x, &nkeyrec, &header);
-
-    if (status != 0) {
-      wcs_to_python_exc(&(copy->x));
-      wcsfree(&copy->x);
-      goto exit;
-    }
-
-    wcsfree(&copy->x);
-
-  } else {
-
-    wcsprm_python2c(&self->x);
-    status = wcshdo(relax, &self->x, &nkeyrec, &header);
-    wcsprm_c2python(&self->x);
-
-    if (status != 0) {
-      wcs_to_python_exc(&(self->x));
-      goto exit;
-    }
-
+  if (status != 0) {
+    wcs_to_python_exc(&(self->x));
+    goto exit;
   }
 
   /* Just return the raw header string.  astropy.io.fits on the Python side will
@@ -2550,7 +2185,6 @@ PyWcsprm_get_cd(
     /*@unused@*/ void* closure) {
 
   npy_intp dims[2];
-  PyObject* result;
 
   if (is_null(self->x.cd)) {
     return NULL;
@@ -2564,13 +2198,7 @@ PyWcsprm_get_cd(
   dims[0] = self->x.naxis;
   dims[1] = self->x.naxis;
 
-  if (self->unit_scaling != NULL) {
-    result = get_scaled_double_array_readonly("cd", self->x.cd, self->unit_scaling, 2, dims, (PyObject*)self);
-  } else {
-    result = get_double_array("cd", self->x.cd, 2, dims, (PyObject*)self);
-  }
-
-  return result;
+  return get_double_array("cd", self->x.cd, 2, dims, (PyObject*)self);
 }
 
 static int
@@ -2599,14 +2227,6 @@ PyWcsprm_set_cd(
     return -1;
   }
 
-  if (self->unit_scaling != NULL) {
-    for (npy_intp i = 0; i < dims[0]; ++i) {
-      for (npy_intp j = 0; j < dims[1]; ++j) {
-        self->x.cd[i * dims[1] + j] *= self->unit_scaling[i];
-      }
-    }
-  }
-
   self->x.altlin |= has_cd;
 
   note_change(self);
@@ -2620,7 +2240,6 @@ PyWcsprm_get_cdelt(
     /*@unused@*/ void* closure) {
 
   Py_ssize_t naxis = 0;
-  PyObject* result;
 
   if (is_null(self->x.cdelt)) {
     return NULL;
@@ -2632,15 +2251,7 @@ PyWcsprm_get_cdelt(
     PyErr_WarnEx(NULL, "cdelt will be ignored since cd is present", 1);
   }
 
-  if (self->unit_scaling != NULL) {
-    result = get_scaled_double_array_readonly("cdelt", self->x.cdelt, self->unit_scaling, 1, &naxis, (PyObject*)self);
-  } else {
-    result = get_double_array("cdelt", self->x.cdelt, 1, &naxis, (PyObject*)self);
-  }
-
-  return result;
-
-
+  return get_double_array("cdelt", self->x.cdelt, 1, &naxis, (PyObject*)self);
 }
 
 /*@null@*/ static int
@@ -2650,7 +2261,6 @@ PyWcsprm_set_cdelt(
     /*@unused@*/ void* closure) {
 
   npy_intp dims;
-  int status;
 
   if (is_null(self->x.cdelt)) {
     return -1;
@@ -2664,15 +2274,7 @@ PyWcsprm_set_cdelt(
 
   note_change(self);
 
-  status = set_double_array("cdelt", value, 1, &dims, self->x.cdelt);
-
-  if (status == 0 && self->original_cunit != NULL) {
-    for (npy_intp i = 0; i < dims; ++i) {
-      self->x.cdelt[i] *= self->unit_scaling[i];
-    }
-  }
-
-  return status;
+  return set_double_array("cdelt", value, 1, &dims, self->x.cdelt);
 }
 
 static PyObject*
@@ -2895,7 +2497,6 @@ PyWcsprm_get_crval(
     /*@unused@*/ void* closure) {
 
   Py_ssize_t naxis = 0;
-  PyObject* result;
 
   if (is_null(self->x.crval)) {
     return NULL;
@@ -2903,14 +2504,7 @@ PyWcsprm_get_crval(
 
   naxis = (Py_ssize_t)self->x.naxis;
 
-  if (self->unit_scaling != NULL) {
-    result = get_scaled_double_array_readonly("cdelt", self->x.crval, self->unit_scaling, 1, &naxis, (PyObject*)self);
-  } else {
-    result = get_double_array("crval", self->x.crval, 1, &naxis, (PyObject*)self);
-  }
-
-  return result;
-
+  return get_double_array("crval", self->x.crval, 1, &naxis, (PyObject*)self);
 }
 
 static int
@@ -2920,7 +2514,6 @@ PyWcsprm_set_crval(
     /*@unused@*/ void* closure) {
 
   npy_intp naxis;
-  int status;
 
   if (is_null(self->x.crval)) {
     return -1;
@@ -2930,16 +2523,7 @@ PyWcsprm_set_crval(
 
   note_change(self);
 
-  status = set_double_array("crval", value, 1, &naxis, self->x.crval);
-
-  if (status == 0 && self->original_cunit != NULL) {
-    for (npy_intp i = 0; i < naxis; ++i) {
-      self->x.crval[i] *= self->unit_scaling[i];
-    }
-  }
-
-  return status;
-
+  return set_double_array("crval", value, 1, &naxis, self->x.crval);
 }
 
 /*@null@*/ static PyObject*
@@ -3030,13 +2614,8 @@ PyWcsprm_get_cunit(
     return NULL;
   }
 
-  if (self->original_cunit != NULL) {
-    return get_unit_list(
-      "cunit", self->original_cunit, (Py_ssize_t)self->x.naxis, (PyObject*)self, 1);
-  } else {
-    return get_unit_list(
-      "cunit", self->x.cunit, (Py_ssize_t)self->x.naxis, (PyObject*)self, 0);
-  }
+  return get_unit_list(
+    "cunit", self->x.cunit, (Py_ssize_t)self->x.naxis, (PyObject*)self);
 }
 
 static int
@@ -3045,57 +2624,14 @@ PyWcsprm_set_cunit(
     PyObject* value,
     /*@unused@*/ void* closure) {
 
-  double scale;
-
   if (is_null(self->x.cunit)) {
     return -1;
   }
 
   note_change(self);
 
-  // Note that if the user explicitly changes the units we should now preserve
-  // those new units. The way the WCS class works normally when units are not
-  // preserved is that changing units on an existing WCS is not just a unit
-  // conversion but truly overriding units. The simplest and safest way to achieve
-  // this here is to undo any changes that were made by the WCS class related to
-  // units (scaling cdelt, crval, and optionally cd), set the new units on the
-  // WCS class, and let it figure out if the new units warrant re-instating the
-  // scaling.
-
-  if (self->unit_scaling != NULL) {
-
-    for (int i = 0; i < self->x.naxis; ++i) {
-
-      scale = self->unit_scaling[i];
-
-      if (scale != 1.) {
-
-        self->x.cdelt[i] /= scale;
-        self->x.crval[i] /= scale;
-
-        if (self->x.cd) {
-            for (int j = 0; j < self->x.naxis; j++) {
-                *(self->x.cd + i*self->x.naxis + j) /= scale;
-            }
-        }
-
-      }
-
-    }
-
-    free(self->unit_scaling);
-    self->unit_scaling = NULL;
-
-  }
-
-  if (self->original_cunit != NULL) {
-    free(self->original_cunit);
-    self->original_cunit = NULL;
-  }
-
   return set_unit_list(
-      (PyObject *)self, "cunit", value, (Py_ssize_t)self->x.naxis, self->x.cunit);
-
+    (PyObject *)self, "cunit", value, (Py_ssize_t)self->x.naxis, self->x.cunit);
 }
 
 /*@null@*/ static PyObject*
@@ -4422,7 +3958,7 @@ static PyObject* PyWcsprm_get_wtb(PyWcsprm* self, void* closure) {
       return NULL;
     }
 
-    PyList_SetItem(list, i, elem);
+    PyList_SET_ITEM(list, i, elem);
   }
 
   return list;
@@ -4451,24 +3987,6 @@ PyWcsprm_set_zsource(
   return set_double("zsource", value, &self->x.zsource);
 }
 
-
- /*@null@*/ static PyObject*
-PyWcsprm_get_unit_scaling(
-    PyWcsprm* self,
-    /*@unused@*/ void* closure) {
-
-  Py_ssize_t naxis = 0;
-  PyObject* result;
-
-  if (self->unit_scaling == NULL) {
-    return Py_None;
-  }
-
-  naxis = self->x.naxis;
-
-  return get_double_array("unit_scaling", self->unit_scaling, 1, &naxis, (PyObject*)self);
-
-}
 
 static PyObject*
 PyWcsprm_get_aux(
@@ -4578,7 +4096,6 @@ static PyGetSetDef PyWcsprm_getset[] = {
   {"xposure", (getter)PyWcsprm_get_xposure, (setter)PyWcsprm_set_xposure, (char *)doc_xposure},
   {"wtb", (getter)PyWcsprm_get_wtb, NULL, (char *) doc_wtb},
   {"zsource", (getter)PyWcsprm_get_zsource, (setter)PyWcsprm_set_zsource, (char *)doc_zsource},
-  {"_unit_scaling", (getter)PyWcsprm_get_unit_scaling, NULL, NULL},  // For debugging
   {NULL}
 };
 
@@ -4618,26 +4135,46 @@ static PyMethodDef PyWcsprm_methods[] = {
   {NULL}
 };
 
-static PyType_Spec PyWcsprm_spec = {
-  .name = "astropy.wcs.Wcsprm",
-  .basicsize = sizeof(PyWcsprm),
-  .itemsize = 0,
-  .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_IMMUTABLETYPE,
-  .slots = (PyType_Slot[]) {
-    {Py_tp_dealloc, (destructor)PyWcsprm_dealloc},
-    {Py_tp_repr, (reprfunc)PyWcsprm___str__},
-    {Py_tp_str, (reprfunc)PyWcsprm___str__},
-    {Py_tp_doc, doc_Wcsprm},
-    {Py_tp_richcompare, PyWcsprm_richcompare},
-    {Py_tp_methods, PyWcsprm_methods},
-    {Py_tp_getset, PyWcsprm_getset},
-    {Py_tp_init, (initproc)PyWcsprm_init},
-    {Py_tp_new, PyWcsprm_new},
-    {0, NULL},
-  },
+PyTypeObject PyWcsprmType = {
+  PyVarObject_HEAD_INIT(NULL, 0)
+  "astropy.wcs.Wcsprm",              /*tp_name*/
+  sizeof(PyWcsprm),             /*tp_basicsize*/
+  0,                            /*tp_itemsize*/
+  (destructor)PyWcsprm_dealloc, /*tp_dealloc*/
+  0,                            /*tp_print*/
+  0,                            /*tp_getattr*/
+  0,                            /*tp_setattr*/
+  0,                            /*tp_compare*/
+  (reprfunc)PyWcsprm___str__,   /*tp_repr*/
+  0,                            /*tp_as_number*/
+  0,                            /*tp_as_sequence*/
+  0,                            /*tp_as_mapping*/
+  0,                            /*tp_hash */
+  0,                            /*tp_call*/
+  (reprfunc)PyWcsprm___str__,   /*tp_str*/
+  0,                            /*tp_getattro*/
+  0,                            /*tp_setattro*/
+  0,                            /*tp_as_buffer*/
+  Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
+  doc_Wcsprm,                   /* tp_doc */
+  0,                            /* tp_traverse */
+  0,                            /* tp_clear */
+  PyWcsprm_richcompare,         /* tp_richcompare */
+  0,                            /* tp_weaklistoffset */
+  0,                            /* tp_iter */
+  0,                            /* tp_iternext */
+  PyWcsprm_methods,             /* tp_methods */
+  0,                            /* tp_members */
+  PyWcsprm_getset,              /* tp_getset */
+  0,                            /* tp_base */
+  0,                            /* tp_dict */
+  0,                            /* tp_descr_get */
+  0,                            /* tp_descr_set */
+  0,                            /* tp_dictoffset */
+  (initproc)PyWcsprm_init,      /* tp_init */
+  0,                            /* tp_alloc */
+  PyWcsprm_new,                 /* tp_new */
 };
-
-PyObject* PyWcsprmType = NULL;
 
 #define CONSTANT(a) PyModule_AddIntConstant(m, #a, a)
 #define CONSTANT2(n, v) PyModule_AddIntConstant(m, n, v)
@@ -4673,17 +4210,18 @@ int add_prj_codes(PyObject* module)
 int
 _setup_wcsprm_type(
     PyObject* m) {
-  PyWcsprmType = PyType_FromSpec(&PyWcsprm_spec);
 
-  if (PyWcsprmType == NULL) {
+  if (PyType_Ready(&PyWcsprmType) < 0) {
     return -1;
   }
+
+  Py_INCREF(&PyWcsprmType);
 
   wcsprintf_set(NULL);
   wcserr_enable(1);
 
   return (
-    PyModule_AddObject(m, "Wcsprm", PyWcsprmType) ||
+    PyModule_AddObject(m, "Wcsprm", (PyObject *)&PyWcsprmType) ||
     CONSTANT(WCSSUB_LONGITUDE) ||
     CONSTANT(WCSSUB_LATITUDE)  ||
     CONSTANT(WCSSUB_CUBEFACE)  ||

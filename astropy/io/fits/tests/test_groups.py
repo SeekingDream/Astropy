@@ -150,7 +150,8 @@ class TestGroupsFunctions(FitsTestCase):
         Basic test for creating GroupData from scratch.
         """
 
-        imdata = np.arange(100.0).reshape((10, 1, 1, 2, 5))
+        imdata = np.arange(100.0)
+        imdata.shape = (10, 1, 1, 2, 5)
         pdata1 = np.arange(10, dtype=np.float32) + 0.1
         pdata2 = 42.0
         x = fits.hdu.groups.GroupData(
@@ -194,7 +195,8 @@ class TestGroupsFunctions(FitsTestCase):
         value.
         """
 
-        imdata = np.arange(100.0).reshape((10, 1, 1, 2, 5))
+        imdata = np.arange(100.0)
+        imdata.shape = (10, 1, 1, 2, 5)
         pdata1 = np.arange(10, dtype=np.float32) + 1
         pdata2 = 42.0
         x = fits.hdu.groups.GroupData(
@@ -241,11 +243,3 @@ class TestGroupsFunctions(FitsTestCase):
             assert len(hdul) == 1
             assert hdul[0].header["GROUPS"]
             assert hdul[0].data is None
-
-    def test_not_groups_file(self):
-        hdu = fits.PrimaryHDU()
-        hdu.header["GROUPS"] = (1, "not a groups HDU")
-        hdu.writeto(self.temp("not_groups.fits"))
-        with fits.open(self.temp("not_groups.fits")) as hdul:
-            assert hdul[0].header["GROUPS"] == 1
-            assert hdul[0].header.comments["GROUPS"] == "not a groups HDU"

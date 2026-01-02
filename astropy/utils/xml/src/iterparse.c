@@ -1,7 +1,7 @@
 /******************************************************************************
  * C extension code for astropy.utils.xml.iterparse
  *
- * Everything in this file could be implemented in Python and
+ * Everything in this file has an alternate Python implementation and
  * is included for performance reasons only.
  *
  * It has two main parts:
@@ -23,10 +23,6 @@
  ******************************************************************************/
 
 #include <stdio.h>
-#include <string.h> // memcpy
-#ifndef _MSC_VER
-#  include <unistd.h> // read
-#endif
 #include <Python.h>
 #include "structmember.h"
 
@@ -91,6 +87,11 @@ next_power_of_2(Py_ssize_t n)
 # define TD_AS_INT_MASK 0xffffff00
 #endif
 
+/* Clang doesn't like the hackish stuff PyTuple_SET_ITEM does... */
+#ifdef __clang__
+#undef PyTuple_SET_ITEM
+#define PyTuple_SET_ITEM(a, b, c) PyTuple_SetItem((a), (b), (c))
+#endif
 
 /******************************************************************************
  * IterParser type
@@ -356,7 +357,7 @@ startElement(IterParser *self, const XML_Char *name, const XML_Char **atts)
         }
 
         Py_INCREF(Py_True);
-        PyTuple_SetItem(tuple, 0, Py_True);
+        PyTuple_SET_ITEM(tuple, 0, Py_True);
 
         /* This is an egregious but effective optimization.  Since by
            far the most frequently occurring element name in a large
@@ -472,7 +473,7 @@ endElement(IterParser *self, const XML_Char *name)
         }
 
         Py_INCREF(Py_False);
-        PyTuple_SetItem(tuple, 0, Py_False);
+        PyTuple_SET_ITEM(tuple, 0, Py_False);
 
         /* This is an egregious but effective optimization.  Since by
            far the most frequently occurring element name in a large
@@ -578,13 +579,13 @@ xmlDecl(IterParser *self, const XML_Char *version,
         }
 
         Py_INCREF(Py_True);
-        PyTuple_SetItem(tuple, 0, Py_True);
+        PyTuple_SET_ITEM(tuple, 0, Py_True);
 
         xml_str = PyUnicode_FromString("xml");
         if (xml_str == NULL) {
             goto fail;
         }
-        PyTuple_SetItem(tuple, 1, xml_str);
+        PyTuple_SET_ITEM(tuple, 1, xml_str);
         xml_str = NULL;
 
         attrs = PyDict_New();
@@ -622,7 +623,7 @@ xmlDecl(IterParser *self, const XML_Char *version,
         Py_DECREF(version_str);
         version_str = NULL;
 
-        PyTuple_SetItem(tuple, 2, attrs);
+        PyTuple_SET_ITEM(tuple, 2, attrs);
         attrs = NULL;
 
         self->last_line = (unsigned long)XML_GetCurrentLineNumber(
@@ -660,7 +661,7 @@ xmlDecl(IterParser *self, const XML_Char *version,
 static PyObject *
 IterParser_iter(IterParser* self)
 {
-    Py_INCREF((PyObject*)self);
+    Py_INCREF(self);
     return (PyObject*) self;
 }
 
@@ -813,10 +814,6 @@ IterParser_traverse(IterParser *self, visitproc visit, void *arg)
     int vret;
     Py_ssize_t read_index;
 
-    // Heap types must visit their type
-    // see https://docs.python.org/3/c-api/typeobj.html#c.PyTypeObject.tp_traverse
-    Py_VISIT((PyObject*)Py_TYPE((PyObject*)self));
-
     read_index = self->queue_read_idx;
     while (read_index < self->queue_write_idx) {
         vret = visit(self->queue[read_index++], arg);
@@ -931,9 +928,7 @@ IterParser_dealloc(IterParser* self)
         self->parser = NULL;
     }
 
-    PyTypeObject* type = Py_TYPE((PyObject*)self);
-    freefunc free_func = PyType_GetSlot(type, Py_tp_free);
-    free_func((PyObject*)self);
+    Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 /*
@@ -945,8 +940,7 @@ IterParser_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
     IterParser *self = NULL;
 
-    allocfunc alloc_func = PyType_GetSlot(type, Py_tp_alloc);
-    self = (IterParser *)alloc_func(type, 0);
+    self = (IterParser *)type->tp_alloc(type, 0);
     if (self != NULL) {
         self->parser          = NULL;
         self->fd              = NULL;
@@ -1108,28 +1102,47 @@ static PyMethodDef IterParser_methods[] =
     {NULL}  /* Sentinel */
 };
 
-static PyType_Spec IterParserType_spec =
+static PyTypeObject IterParserType =
 {
-    .name = "astropy.utils.xml._iterparser.IterParser",
-    .basicsize = sizeof(IterParser),
-    .itemsize = 0,
-    .flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC | Py_TPFLAGS_IMMUTABLETYPE,
-    .slots = (PyType_Slot[]){
-        {Py_tp_dealloc, (destructor)IterParser_dealloc},
-        {Py_tp_doc, "IterParser objects"},
-        {Py_tp_traverse, (traverseproc)IterParser_traverse},
-        {Py_tp_clear, (inquiry)IterParser_clear},
-        {Py_tp_iter, (getiterfunc)IterParser_iter},
-        {Py_tp_iternext, (iternextfunc)IterParser_next},
-        {Py_tp_methods, IterParser_methods},
-        {Py_tp_members, IterParser_members},
-        {Py_tp_init, (initproc)IterParser_init},
-        {Py_tp_new, IterParser_new},
-        {0, NULL},
-    },
+    PyVarObject_HEAD_INIT(NULL, 0)
+    "astropy.utils.xml._iterparser.IterParser",    /*tp_name*/
+    sizeof(IterParser),         /*tp_basicsize*/
+    0,                          /*tp_itemsize*/
+    (destructor)IterParser_dealloc, /*tp_dealloc*/
+    0,                          /*tp_print*/
+    0,                          /*tp_getattr*/
+    0,                          /*tp_setattr*/
+    0,                          /*tp_compare*/
+    0,                          /*tp_repr*/
+    0,                          /*tp_as_number*/
+    0,                          /*tp_as_sequence*/
+    0,                          /*tp_as_mapping*/
+    0,                          /*tp_hash */
+    0,                          /*tp_call*/
+    0,                          /*tp_str*/
+    0,                          /*tp_getattro*/
+    0,                          /*tp_setattro*/
+    0,                          /*tp_as_buffer*/
+    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_HAVE_GC, /*tp_flags*/
+    "IterParser objects",       /* tp_doc */
+    (traverseproc)IterParser_traverse, /* tp_traverse */
+    (inquiry)IterParser_clear,  /* tp_clear */
+    0,                          /* tp_richcompare */
+    0,                          /* tp_weaklistoffset */
+    (getiterfunc)IterParser_iter, /* tp_iter */
+    (iternextfunc)IterParser_next, /* tp_iternext */
+    IterParser_methods,         /* tp_methods */
+    IterParser_members,         /* tp_members */
+    0,                          /* tp_getset */
+    0,                          /* tp_base */
+    0,                          /* tp_dict */
+    0,                          /* tp_descr_get */
+    0,                          /* tp_descr_set */
+    0,                          /* tp_dictoffset */
+    (initproc)IterParser_init,  /* tp_init */
+    0,                          /* tp_alloc */
+    IterParser_new,             /* tp_new */
 };
-
-PyObject* IterParserType = NULL;
 
 /******************************************************************************
  * XML escaping
@@ -1343,11 +1356,11 @@ PyInit__iterparser(void)
     if (m == NULL)
         return NULL;
 
-    IterParserType = PyType_FromModuleAndSpec(m, &IterParserType_spec, NULL);
-    if (IterParserType == NULL)
+    if (PyType_Ready(&IterParserType) < 0)
         return NULL;
 
-    PyModule_AddObject(m, "IterParser", IterParserType);
+    Py_INCREF(&IterParserType);
+    PyModule_AddObject(m, "IterParser", (PyObject *)&IterParserType);
 
     return m;
 }

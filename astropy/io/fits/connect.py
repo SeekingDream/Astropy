@@ -5,7 +5,6 @@ import os
 import re
 import warnings
 from copy import deepcopy
-from itertools import pairwise
 
 import numpy as np
 
@@ -66,10 +65,14 @@ def is_fits(origin, filepath, fileobj, *args, **kwargs):
         fileobj.seek(pos)
         return sig == FITS_SIGNATURE
     elif filepath is not None:
-        return filepath.lower().endswith(
+        if filepath.lower().endswith(
             (".fits", ".fits.gz", ".fit", ".fit.gz", ".fts", ".fts.gz")
-        )
-    return isinstance(args[0], (HDUList, TableHDU, BinTableHDU, GroupsHDU))
+        ):
+            return True
+    elif isinstance(args[0], (HDUList, TableHDU, BinTableHDU, GroupsHDU)):
+        return True
+    else:
+        return False
 
 
 def _decode_mixins(tbl):
@@ -114,7 +117,9 @@ def _decode_mixins(tbl):
 
     # Construct new table with mixins, using tbl.meta['__serialized_columns__']
     # as guidance.
-    return serialize._construct_mixins_from_columns(tbl)
+    tbl = serialize._construct_mixins_from_columns(tbl)
+
+    return tbl
 
 
 def read_table_fits(
@@ -125,10 +130,9 @@ def read_table_fits(
     character_as_bytes=True,
     unit_parse_strict="warn",
     mask_invalid=True,
-    strip_spaces=False,
 ):
     """
-    Read a Table object from an FITS file.
+    Read a Table object from an FITS file
 
     If the ``astropy_native`` argument is ``True``, then input FITS columns
     which are representations of an astropy core object will be converted to
@@ -159,9 +163,8 @@ def read_table_fits(
         fit the table in memory, you may be better off leaving memory mapping
         off. However, if your table would not fit in memory, you should set this
         to `True`.
-        When set to `True` then ``mask_invalid`` and ``strip_spaces`` are set
-        to `False` since the masking and whitespace removal would cause loading
-        the full data array.
+        When set to `True` then ``mask_invalid`` is set to `False` since the
+        masking would cause loading the full data array.
     character_as_bytes : bool, optional
         If `True`, string columns are stored as Numpy byte arrays (dtype ``S``)
         and are converted on-the-fly to unicode strings when accessing
@@ -180,19 +183,15 @@ def read_table_fits(
         string columns. Set this parameter to `False` to avoid the performance
         penalty of doing this masking step. The masking is always deactivated
         when using ``memmap=True`` (see above).
-    strip_spaces : bool, optional
-        Strip trailing whitespace in string columns, default is False and will be
-        changed to True in the next major release. This is deactivated when
-        using ``memmap=True`` (see above).
 
     """
+
     if isinstance(input, HDUList):
         # Parse all table objects
-        tables = {
-            ihdu: hdu_item
-            for ihdu, hdu_item in enumerate(input)
-            if isinstance(hdu_item, (TableHDU, BinTableHDU, GroupsHDU))
-        }
+        tables = dict()
+        for ihdu, hdu_item in enumerate(input):
+            if isinstance(hdu_item, (TableHDU, BinTableHDU, GroupsHDU)):
+                tables[ihdu] = hdu_item
 
         if len(tables) > 1:
             if hdu is None:
@@ -242,10 +241,9 @@ def read_table_fits(
 
     else:
         if memmap:
-            # using memmap is not compatible with masking invalid value and
-            # removing trailing whitespace by default so we deactivate that
+            # using memmap is not compatible with masking invalid value by
+            # default so we deactivate the masking
             mask_invalid = False
-            strip_spaces = False
 
         hdulist = fits_open(input, character_as_bytes=character_as_bytes, memmap=memmap)
 
@@ -256,53 +254,40 @@ def read_table_fits(
                 astropy_native=astropy_native,
                 unit_parse_strict=unit_parse_strict,
                 mask_invalid=mask_invalid,
-                strip_spaces=strip_spaces,
             )
         finally:
             hdulist.close()
 
+    # In the loop below we access the data using data[col.name] rather than
+    # col.array to make sure that the data is scaled correctly if needed.
     data = table.data
 
     columns = []
     for col in data.columns:
-        # use data[col.name] rather than col.array to make sure that the data
-        # is scaled correctly if needed.
-        arr = data[col.name]
-        coltype = col.dtype.subdtype[0].type if col.dtype.subdtype else col.dtype.type
-
-        if strip_spaces and coltype is np.bytes_:
-            arr = arr.rstrip()
-
         # Check if column is masked. Here, we make a guess based on the
         # presence of FITS mask values. For integer columns, this is simply
         # the null header, for float and complex, the presence of NaN, and for
         # string, empty strings.
         # Since Multi-element columns with dtypes such as '2f8' have a subdtype,
         # we should look up the type of column on that.
-        # Also propagate TNULL (for ints) or the FITS default null value for
-        # floats and strings to the column's fill_value to ensure round trips
-        # preserve null values.
         masked = mask = False
-        fill_value = None
+        coltype = col.dtype.subdtype[0].type if col.dtype.subdtype else col.dtype.type
         if col.null is not None:
-            mask = arr == col.null
+            mask = data[col.name] == col.null
             # Return a MaskedColumn even if no elements are masked so
             # we roundtrip better.
             masked = True
-            fill_value = col.null
         elif mask_invalid and issubclass(coltype, np.inexact):
-            mask = np.isnan(arr)
-            fill_value = np.nan
+            mask = np.isnan(data[col.name])
         elif mask_invalid and issubclass(coltype, np.character):
-            mask = arr == b""
-            fill_value = b""
+            mask = col.array == b""
 
         if masked or np.any(mask):
             column = MaskedColumn(
-                data=arr, name=col.name, mask=mask, copy=False, fill_value=fill_value
+                data=data[col.name], name=col.name, mask=mask, copy=False
             )
         else:
-            column = Column(data=arr, name=col.name, copy=False)
+            column = Column(data=data[col.name], name=col.name, copy=False)
 
         # Copy over units
         if col.unit is not None:
@@ -354,7 +339,9 @@ def read_table_fits(
     # TODO: implement masking
 
     # Decode any mixin columns that have been stored as standard Columns.
-    return _decode_mixins(t)
+    t = _decode_mixins(t)
+
+    return t
 
 
 def _encode_mixins(tbl):
@@ -395,7 +382,7 @@ def _encode_mixins(tbl):
         encode_tbl = Table(tbl.columns, meta=meta_copy, copy=False)
 
     # Get the YAML serialization of information describing the table columns.
-    # This is reusing ECSV code that combined existing table.meta with with
+    # This is re-using ECSV code that combined existing table.meta with with
     # the extra __serialized_columns__ key.  For FITS the table.meta is handled
     # by the native FITS connect code, so don't include that in the YAML
     # output.
@@ -423,7 +410,7 @@ def _encode_mixins(tbl):
         else:
             # Split line into 70 character chunks for COMMENT cards
             idxs = list(range(0, len(line) + 70, 70))
-            lines = [line[i0:i1] + "\\" for i0, i1 in pairwise(idxs)]
+            lines = [line[i0:i1] + "\\" for i0, i1 in zip(idxs[:-1], idxs[1:])]
             lines[-1] = lines[-1][:-1]
         encode_tbl.meta["comments"].extend(lines)
 
@@ -432,31 +419,29 @@ def _encode_mixins(tbl):
     return encode_tbl
 
 
-def write_table_fits(input, output, overwrite=False, append=False, name=None):
+def write_table_fits(input, output, overwrite=False, append=False):
     """
-    Write a Table object to a FITS file.
+    Write a Table object to a FITS file
 
     Parameters
     ----------
     input : Table
         The table to write out.
-    output : str or os.PathLike[str] or file-like
+    output : str
         The filename to write the table to.
     overwrite : bool
         Whether to overwrite any existing file without warning.
     append : bool
         Whether to append the table to an existing file
-    name : str
-        Name to be populated in ``EXTNAME`` keyword.
-
     """
+
     # Encode any mixin columns into standard Columns.
     input = _encode_mixins(input)
 
-    table_hdu = table_to_hdu(input, character_as_bytes=True, name=name)
+    table_hdu = table_to_hdu(input, character_as_bytes=True)
 
     # Check if output file already exists
-    if isinstance(output, (str, os.PathLike)) and os.path.exists(output):
+    if isinstance(output, str) and os.path.exists(output):
         if overwrite:
             os.remove(output)
         elif not append:

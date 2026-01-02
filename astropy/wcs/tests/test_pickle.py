@@ -31,13 +31,7 @@ def test_dist():
     ) as test_file:
         hdulist = fits.open(test_file)
         # The use of ``AXISCORR`` for D2IM correction has been deprecated
-        with (
-            pytest.warns(AstropyDeprecationWarning),
-            pytest.warns(
-                wcs.FITSFixedWarning,
-                match="The WCS transformation has more axes",
-            ),
-        ):
+        with pytest.warns(AstropyDeprecationWarning):
             wcs1 = wcs.WCS(hdulist[0].header, hdulist)
         assert wcs1.det2im2 is not None
 

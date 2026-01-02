@@ -9,17 +9,16 @@ import abc
 
 import numpy as np
 
-from astropy.utils.masked import get_data_and_mask
+from astropy.utils.decorators import deprecated_attribute, deprecated_renamed_argument
 
 from .transform import BaseTransform
 
 __all__ = [
-    "AsymmetricPercentileInterval",
     "BaseInterval",
     "ManualInterval",
     "MinMaxInterval",
+    "AsymmetricPercentileInterval",
     "PercentileInterval",
-    "SymmetricInterval",
     "ZScaleInterval",
 ]
 
@@ -47,49 +46,12 @@ class BaseInterval(BaseTransform):
         vmin, vmax : float
             The mininium and maximum image value in the interval.
         """
+
         raise NotImplementedError("Needs to be implemented in a subclass.")
-
-    @staticmethod
-    def _process_values(values):
-        """
-        Process the input values.
-
-        This function filters out masked and/or invalid values (inf,
-        nan) and returns a flattened 1D array.
-
-        Parameters
-        ----------
-        values : array-like
-            The input values.
-
-        Returns
-        -------
-        result : 1D ndarray
-            The processed values.
-        """
-        data, mask = get_data_and_mask(np.asanyarray(values))
-        ok = np.isfinite(data)
-        if mask is not None:
-            ok &= ~mask
-
-        return data[ok]
 
     def __call__(self, values, clip=True, out=None):
         """
         Transform values using this interval.
-
-        The ``vmin`` and ``vmax`` values are determined by the
-        `get_limits` method.
-
-        The following transformation is then applied to the values:
-
-        .. math::
-
-            {\\rm result} = \\frac{{\\rm values} - v_{\\rm min}}
-                                   {v_{\\rm max} - v_{\\rm min}}
-
-        If ``clip`` is `True` (default), the result is then clipped to
-        the [0:1] range.
 
         Parameters
         ----------
@@ -107,6 +69,7 @@ class BaseInterval(BaseTransform):
         result : ndarray
             The transformed values.
         """
+
         vmin, vmax = self.get_limits(values)
 
         if out is None:
@@ -151,7 +114,12 @@ class ManualInterval(BaseInterval):
         if self.vmin is not None and self.vmax is not None:
             return self.vmin, self.vmax
 
-        values = self._process_values(values)
+        # Make sure values is a Numpy array
+        values = np.asarray(values).ravel()
+
+        # Filter out invalid values (inf, nan)
+        values = values[np.isfinite(values)]
+
         vmin = np.min(values) if self.vmin is None else self.vmin
         vmax = np.max(values) if self.vmax is None else self.vmax
 
@@ -164,7 +132,11 @@ class MinMaxInterval(BaseInterval):
     """
 
     def get_limits(self, values):
-        values = self._process_values(values)
+        # Make sure values is a Numpy array
+        values = np.asarray(values).ravel()
+
+        # Filter out invalid values (inf, nan)
+        values = values[np.isfinite(values)]
 
         return np.min(values), np.max(values)
 
@@ -176,34 +148,32 @@ class AsymmetricPercentileInterval(BaseInterval):
 
     Parameters
     ----------
-    lower_percentile : float or None
-        The lower percentile below which to ignore pixels. If None, then
-        defaults to 0.
-    upper_percentile : float or None
-        The upper percentile above which to ignore pixels. If None, then
-        defaults to 100.
+    lower_percentile : float
+        The lower percentile below which to ignore pixels.
+    upper_percentile : float
+        The upper percentile above which to ignore pixels.
     n_samples : int, optional
         Maximum number of values to use. If this is specified, and there
         are more values in the dataset as this, then values are randomly
         sampled from the array (with replacement).
     """
 
-    def __init__(self, lower_percentile=None, upper_percentile=None, n_samples=None):
-        self.lower_percentile = (
-            lower_percentile if lower_percentile is not None else 0.0
-        )
-        self.upper_percentile = (
-            upper_percentile if upper_percentile is not None else 100.0
-        )
+    def __init__(self, lower_percentile, upper_percentile, n_samples=None):
+        self.lower_percentile = lower_percentile
+        self.upper_percentile = upper_percentile
         self.n_samples = n_samples
 
     def get_limits(self, values):
-        values = self._process_values(values)
+        # Make sure values is a Numpy array
+        values = np.asarray(values).ravel()
 
         # If needed, limit the number of samples. We sample with replacement
         # since this is much faster.
         if self.n_samples is not None and values.size > self.n_samples:
             values = np.random.choice(values, self.n_samples)
+
+        # Filter out invalid values (inf, nan)
+        values = values[np.isfinite(values)]
 
         # Determine values at percentiles
         vmin, vmax = np.percentile(
@@ -234,39 +204,11 @@ class PercentileInterval(AsymmetricPercentileInterval):
         super().__init__(lower_percentile, upper_percentile, n_samples=n_samples)
 
 
-class SymmetricInterval(BaseInterval):
-    """
-    Interval based on a symmetric radius away from a midpoint.
-
-    Parameters
-    ----------
-    radius : float or None
-        The amount the interval extends to either side of the midpoint, so the total
-        interval is twice this value. If None, the radius is automatically
-        determined such that the resulting interval contains both the image minimum
-        and maximum (ignoring NaNs).
-    midpoint : float, optional
-        The midpoint of the symmetric interval.  Defaults to zero.
-    """
-
-    def __init__(self, radius=None, *, midpoint=0):
-        self.radius = radius
-        self.midpoint = midpoint
-
-    def get_limits(self, values):
-        radius = self.radius
-        if radius is None:
-            values = self._process_values(values)
-            radius = np.max(
-                [np.max(values) - self.midpoint, self.midpoint - np.min(values)]
-            )
-
-        return self.midpoint - radius, self.midpoint + radius
-
-
 class ZScaleInterval(BaseInterval):
     """
     Interval based on IRAF's zscale.
+
+    https://iraf.net/forum/viewtopic.php?showtopic=134139
 
     Original implementation:
     https://github.com/spacetelescope/stsci.numdisplay/blob/master/lib/stsci/numdisplay/zscale.py
@@ -279,12 +221,13 @@ class ZScaleInterval(BaseInterval):
         The number of points in the array to sample for determining
         scaling factors.  Defaults to 1000.
 
-        .. versionchanged:: 7.0
-            ``nsamples`` parameter is removed.
+        .. versionchanged:: 5.2
+            ``n_samples`` replaces the deprecated ``nsamples`` argument,
+            which will be removed in the future.
 
     contrast : float, optional
         The scaling factor (between 0 and 1) for determining the minimum
-        and maximum value.  Larger values decrease the difference
+        and maximum value.  Larger values increase the difference
         between the minimum and maximum values used for display.
         Defaults to 0.25.
     max_reject : float, optional
@@ -302,6 +245,7 @@ class ZScaleInterval(BaseInterval):
         5.
     """
 
+    @deprecated_renamed_argument("nsamples", "n_samples", "5.2")
     def __init__(
         self,
         n_samples=1000,
@@ -318,10 +262,13 @@ class ZScaleInterval(BaseInterval):
         self.krej = krej
         self.max_iterations = max_iterations
 
-    def get_limits(self, values):
-        values = self._process_values(values)
+    # Mark `nsamples` as deprecated
+    nsamples = deprecated_attribute("nsamples", "5.2", alternative="n_samples")
 
+    def get_limits(self, values):
         # Sample the image
+        values = np.asarray(values)
+        values = values[np.isfinite(values)]
         stride = int(max(1.0, values.size / self.n_samples))
         samples = values[::stride][: self.n_samples]
         samples.sort()

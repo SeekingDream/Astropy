@@ -3,7 +3,7 @@
 import os
 import sys
 
-from numpy import get_include as get_numpy_include
+import numpy
 from setuptools import Extension
 
 C_CONVOLVE_PKGDIR = os.path.relpath(os.path.dirname(__file__))
@@ -23,7 +23,7 @@ def get_extensions():
     _convolve_ext = Extension(
         name="astropy.convolution._convolve",
         extra_compile_args=extra_compile_args,
-        include_dirs=[get_numpy_include()],
+        include_dirs=[numpy.get_include()],
         sources=sources,
     )
     return [_convolve_ext]

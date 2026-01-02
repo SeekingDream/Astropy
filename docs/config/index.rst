@@ -34,9 +34,15 @@ The exact location of this file can be obtained with
     >>> from astropy.config import get_config_dir
     >>> get_config_dir()  # doctest: +SKIP
 
-And you should see the location of your configuration directory. The default
-configuration directory is ``$HOME/.astropy/config``, but this can be
-customized with :ref:`environment_variables`.
+And you should see the location of your configuration directory. The standard
+scheme generally puts your configuration directory in
+``$HOME/.astropy/config``. It can be customized with the environment variable
+``XDG_CONFIG_HOME`` in which case the ``$XDG_CONFIG_HOME/astropy`` directory
+must exist. Note that ``XDG_CONFIG_HOME`` comes from a Linux-centric
+specification (see `here
+<https://wiki.archlinux.org/index.php/XDG_Base_Directory_support>`_ for more
+details), but ``astropy`` will use this on any OS as a more general means to
+know where user-specific configurations should be written.
 
 .. note::
     See :ref:`astropy_config_file` for the content of this configuration file.
@@ -54,8 +60,12 @@ changes immediately in your current ``astropy`` session::
 .. note::
     If for whatever reason your ``$HOME/.astropy`` directory is not accessible
     (i.e., you have ``astropy`` running somehow as root but you are not the root
-    user), the best solution is to set :ref:`environment_variables` pointing to
-    directories you control.
+    user), the best solution is to set the ``XDG_CONFIG_HOME`` and
+    ``XDG_CACHE_HOME`` environment variables pointing to directories, and create
+    an ``astropy`` directory inside each of those. Both the configuration and
+    data download systems will then use those directories and never try to
+    access the ``$HOME/.astropy`` directory.
+
 
 Using `astropy.config`
 ======================
@@ -210,35 +220,22 @@ To see what configuration parameters are defined for a given ``conf``::
      'auto_max_age',
      ...,
      'ietf_leap_second_auto_url']
-
-You can see more detailed information about a configuration parameter by
-calling the :meth:`~astropy.config.ConfigNamespace.help` method::
-
-    >>> conf.help("auto_max_age")
-    ConfigItem: auto_max_age
-      cfgtype='float'
-      defaultvalue=30.0
-      description='Maximum age (days) of predictive data before auto-downloading. See "Auto refresh behavior" in astropy.utils.iers documentation for details. Default is 30.'
-      module=astropy.utils.iers.iers
-      value=30.0
-
-You can see information about all the configuration parameters by calling
-:meth:`~astropy.config.ConfigNamespace.help` without arguments::
-
-    >>> conf.help()
-    Configuration parameters for `astropy.utils.iers`.
-    <BLANKLINE>
-    ConfigItem: auto_download
-      cfgtype='boolean'
-      ...
+    >>> conf.auto_max_age
+    30.0
 
 You can also iterate through ``conf`` in a dictionary-like fashion::
 
+    >>> list(conf.values())
+    [<ConfigItem: name='auto_download' value=True at ...>,
+     <ConfigItem: name='auto_max_age' value=30.0 at ...>,
+     ...,
+     <ConfigItem: name='ietf_leap_second_auto_url' value=...>]
     >>> for (key, cfgitem) in conf.items():
-    ...     print(f'{key} default value is {cfgitem.defaultvalue}')
-    auto_download default value is True
-    auto_max_age default value is 30.0
-      ...
+    ...     if key == 'auto_max_age':
+    ...         print(f'{cfgitem.description} Value is {cfgitem()}')
+    Maximum age (days) of predictive data before auto-downloading. See "Auto
+    refresh behavior" in astropy.utils.iers documentation for details. Default
+    is 30. Value is 30.0
 
 Upgrading ``astropy``
 ---------------------
@@ -510,10 +507,7 @@ See Also
 Reference/API
 =============
 
-.. toctree::
-   :maxdepth: 2
-
-   ref_api
+.. automodapi:: astropy.config
 
 .. testcleanup::
 

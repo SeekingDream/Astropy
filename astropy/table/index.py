@@ -1,260 +1,49 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 """
-Table Indexing Implementation for Astropy Tables
-================================================
+The Index class can use several implementations as its
+engine. Any implementation should implement the following:
 
-This module implements indexing functionality for astropy Table objects, enabling fast
-lookups and range queries on table columns. The indexing system uses various data
-structures to maintain sorted representations of table data for efficient searching.
+__init__(data, row_index) : initialize index based on key/row list pairs
+add(key, row) -> None : add (key, row) to existing data
+remove(key, data=None) -> boolean : remove data from self[key], or all of
+                                    self[key] if data is None
+shift_left(row) -> None : decrement row numbers after row
+shift_right(row) -> None : increase row numbers >= row
+find(key) -> list : list of rows corresponding to key
+range(lower, upper, bounds) -> list : rows in self[k] where k is between
+                               lower and upper (<= or < based on bounds)
+sort() -> None : make row order align with key order
+sorted_data() -> list of rows in sorted order (by key)
+replace_rows(row_map) -> None : replace row numbers based on slice
+items() -> list of tuples of the form (key, data)
 
-Note: these docs are intended for developers and are not rendered in the astropy
-narrative docs.
+Notes
+-----
+    When a Table is initialized from another Table, indices are
+    (deep) copied and their columns are set to the columns of the new Table.
 
-Overview
---------
-The astropy Table class supports creating indices on one or more columns to enable fast
-data retrieval operations. When an index is created on a column (or combination of
-columns), a sorted data structure is built that maps column values to their
-corresponding row numbers in the original table.
-
-The indices actually exist only on the columns. Calling ``Table.add_index()`` appends a
-new `SlicedIndex` instance to the `col.indices` list for each of the indexed columns.
-Adding an index always adds a `SlicedIndex` to the indices, with the slice initially
-having ``start=0``, ``stop=len(col)-1`` and ``step=1``. The class has an ``original``
-attribute which is initially ``True`` indicating that the index is not sliced.
-
-The ``Table.indices`` property is a convenience method that returns a dynamically
-created `TableIndices` object that collects the indices from table columns.
-`TableIndices` is a list of `SlicedIndex` that also allows access by ``index_id``.
-
-The ``Table.loc`` and ``Table.iloc`` properties return a new instance of
-`TableLoc(table)` or `TableILoc(table)` each time.
-
-Multiple indices can be defined for a single table. These indices are identified and
-selected by an ``id`` tuple corresponding to the column names being indexed. The
-`SlicedIndex` class defines an ``id`` property. In this module ``index_id`` is used for
-arguments and variables referring to the index identifier.
-
-Key Components
---------------
-
-Core Classes:
-    - `Index`: Wraps different engines and provides core index functions.
-    - `SlicedIndex`: Contains an Index and handles original or sliced tables.
-    - `TableIndices`: Container for all table indices, accessible by number and name.
-
-Index Engines:
-    - `SortedArray`: Array-based sorted container implementation (default)
-    - `SCEngine`: SortedContainers-based implementation (when available)
-    - `BST`: Binary search tree implementation for sorted data (not for production)
-
-Query Interface Classes:
-    - `TableLoc`: Value-based row retrieval using ``.loc[]``.
-    - `TableLocIndices`: Return row indices (not table rows) for ``.loc_indices[]``
-    - `TableILoc`: Return rows in based on sorted index order for ``.iloc[]``
-
-Core Functionality
-------------------
-As a reminder of basic functionality.
-
-Creating indices:
-    Tables support adding indices via ``Table.add_index()``::
-
-      t = Table({'a': [1, 3, 2, 5], 'b': ['x', 'y', 'z', 'w']})
-      t.add_index('a')  # Single column index
-      t.add_index(['a', 'b'])  # Multi-column composite index
-
-Value-Based Lookups with TableLoc:
-    The `TableLoc` class provides the `.loc[]` interface for value-based queries::
-
-      t.loc[3]  # Find row where indexed column 'a' equals 3
-      t.loc[2:4]  # Range query: rows where 'a' is between 2 and 4 (inclusive)
-      t.loc[[1, 3, 5]]  # Multiple specific values
-      t.loc.with_index('a')[3]  # Explicitly specify index column and value
-      t.loc.with_index('a', 'b')[2, 'z']  # Multi-column composite key lookup
-
-    Range queries support slice notation with inclusive bounds: - ``t.loc[2:5]`` returns
-    rows where indexed values are between 2 and 5 - ``t.loc[:3]`` returns rows where
-    values are ≤ 3 - ``t.loc[4:]`` returns rows where values are ≥ 4.
-
-Value-Based Lookups with TableLocIndices:
-    The `TableLocIndices` class provides the `.loc_indices[]` interface for value-based
-    queries that return row indices instead of table rows. All of the examples for
-    `t.loc` apply here as well, but with ``t.loc_indices`` returning indices instead::
-
-      t.loc_indices[3]  # Find row index where indexed column 'a' equals 3
-
-    This is useful when only row positions are needed.
-
-Position-Based Access with TableILoc:
-    The `TableILoc` class provides `.iloc[]` for accessing rows by their position in the
-    sorted index order (not original table order)::
-
-        t.iloc[0]  # First row in sorted order
-        t.iloc[-1]  # Last row in sorted order
-        t.iloc[1:3]  # Rows 1-2 in sorted order
-
-Index Management:
-    - `TableIndices`: Container class that allows retrieval of indices by index id
-    - `get_index()`: Utility function to find existing indices on specified columns
-    - `get_index_by_names()`: Find index by exact column name match
-
-Sliced Table Handling
---------------------
-
-When a table is sliced (e.g., `t_slice = t[2:8]`), the resulting table uses a
-`SlicedIndex` that maintains a reference to the original table's index. This approach
-avoids rebuilding indices for sliced views while ensuring lookup operations work
-correctly.
-
-The `SlicedIndex` class handles coordinate translation between the sliced view and the
-original table:
-    - Lookup operations translate slice-relative coordinates to original coordinates
-    - Modification operations (add/remove rows) properly map coordinates
-    - The `orig_coords()` method converts slice indices to original table indices
-    - The `sliced_coords()` method converts original indices back to slice coordinates
-
-The ``original`` attribute of the `SlicedIndex` instance gets set to `False` when the
-parent table or column is sliced.
-
-Query Processing Flow
---------------------
-
-When a query is performed using `.loc[]`:
-
-1. **Index Selection**: The system identifies which index to use based on the index id.
-   If no id is specified, the primary key index is used.
-
-2. **Query Type Detection**: The system determines the query type:
-   - Single value: `t.loc[5]` → exact match lookup
-   - Multiple values: `t.loc[[1, 3, 5]]` → multiple exact matches
-   - Range query: `t.loc[2:6]` → range lookup with inclusive bounds
-
-3. **Index Lookup**: The appropriate index engine performs the search:
-   - Single/multiple lookups use `find()` method
-   - Range queries use `range()` method with MinValue/MaxValue sentinels
-
-4. **Coordinate Translation**: For sliced tables, row indices are translated from
-   original coordinates to sliced coordinates using `sliced_coords()`
-
-5. **Result Construction**: Row indices are used to construct the final Table slice or
-   Row object returned to the user.
-
-Data Structure Integration
--------------------------
-
-The indexing system integrates with the Table's data management:
-    - indices are automatically updated when rows are added or removed
-    - Column value changes invalidate affected indices via the `replace()` method
-    - Sliced tables maintain consistent index behavior through coordinate mapping
-    - Memory usage is optimized by sharing index data between sliced views
-
-TableLoc Implementation Details
-------------------------------
-
-The `TableLoc` class acts as a pseudo-list interface that translates value-based queries
-into row-based table operations:
-
-- **Query Parsing**: Handles various input formats (scalars, lists, slices, tuples)
-- **Index Resolution**: Automatically selects the appropriate index or uses primary key
-- **Bounds Handling**: Converts Python slice notation to inclusive range queries
-- **Result Formatting**: Returns single Row objects for scalar queries, Table slices
-  otherwise
-
-The `TableLocIndices` variant returns raw row indices instead of table data, useful for
-advanced indexing operations or when only row positions are needed.
-
-Implementation Notes
--------------------
-
-The index system is designed to be engine-agnostic, with different backend
-implementations (BST, SortedArray, etc.) providing the same interface. This allows for
-performance optimization based on data characteristics and available dependencies.
-
-The TableLoc classes use a unified internal method `_get_row_idxs_as_list_or_int()` to
-handle the complexity of different query types while maintaining consistent behavior
-across the `.loc[]`, `.iloc[]`, and `.loc_indices[]` interfaces.
-
-Protocol for engine classes
----------------------------
-The `Index` class can use several implementations as its engine. Any implementation must
-implement the following:
-
-- __init__(data, row_index) : initialize index based on key/row list pairs
-- add(key, row) -> None : add (key, row) to existing data
-- remove(key, data=None) -> boolean : remove data from self[key], or all of
-    self[key] if data is None
-- shift_left(row) -> None : decrement row numbers after row
-- shift_right(row) -> None : increase row numbers >= row
-- find(key) -> list : list of rows corresponding to key
-- range(lower, upper, bounds) -> list : rows in self[k] where k is between
-    lower and upper (<= or < based on bounds)
-- sort() -> None : make row order align with key order
-- sorted_data() -> list of rows in sorted order (by key)
-- replace_rows(row_map) -> None : replace row numbers based on slice
-- items() -> list of tuples of the form (key, data)
-
-Copying
--------
-When a Table is initialized from another Table, indices are deep-copied and their
-columns are set to the columns of the new Table.
-
-Column creation: - Column(c) -> deep copy of indices - c[[1, 2]] -> deep copy and
-reordering of indices - c[1:2] -> reference - array.view(Column) -> no indices
+    Column creation:
+    Column(c) -> deep copy of indices
+    c[[1, 2]] -> deep copy and reordering of indices
+    c[1:2] -> reference
+    array.view(Column) -> no indices
 """
 
-from __future__ import annotations
-
 from copy import deepcopy
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import numpy as np
 
-from astropy.utils.decorators import deprecated
-
 from .bst import MaxValue, MinValue
 from .sorted_array import SortedArray
-
-if TYPE_CHECKING:
-    from collections.abc import Hashable, Mapping, Sequence
-    from numbers import Integral
-
-    from . import Table
-
-
-@runtime_checkable
-class IndexEngine(Protocol):
-    """Protocol defining an index engine class"""
-
-    # Taken from soco.py
-    def __init__(self, data, row_index, unique=False): ...
-    # using *args and **kwargs here so existing implementations,
-    # while slightly inconsistent with one another, remain conform without change.
-    def add(self, key: tuple, *args: int | None, **kwargs: int | None) -> None: ...
-    # if we manage to remove the one implementation that's inconsistent with it,
-    # the actual signature should be:
-    # def add(self, key: tuple, row: int) -> None: ...
-    def find(self, key: tuple) -> Sequence[Integral]: ...
-    def remove(self, key: tuple, data: int) -> bool: ...
-    def shift_left(self, row: int) -> None: ...
-    def shift_right(self, row: int) -> None: ...
-    def items(self) -> list[tuple[Hashable, list[Integral]]]: ...
-    def sort(self) -> None: ...
-    def sorted_data(self) -> None: ...
-    def range(
-        self,
-        lower: tuple[Hashable, ...],
-        upper: tuple[Hashable, ...],
-        bounds: tuple[bool, bool],
-    ) -> list[int]: ...
-    def replace_rows(self, row_map: Mapping[int, int]) -> None: ...
 
 
 class QueryError(ValueError):
     """
     Indicates that a given index cannot handle the supplied query.
     """
+
+    pass
 
 
 class Index:
@@ -286,25 +75,15 @@ class Index:
         if columns is not None:
             columns = list(columns)
 
-        # by default, use SortedArray
-        if engine is None:
-            engine = SortedArray
-
-        # Validate engine. This catches an easy mistake of `t.add_index("a", "b")`.
-        engine_cls = engine if isinstance(engine, type) else engine.__class__
-        if not issubclass(engine_cls, IndexEngine):
-            raise TypeError(
-                f"engine must be an Engine class or instance, got {engine!r} instead."
-            )
-
-        if engine is not engine_cls:
+        if engine is not None and not isinstance(engine, type):
             # create from data
-            self.engine = engine_cls
+            self.engine = engine.__class__
             self.data = engine
             self.columns = columns
             return
 
-        self.engine = engine
+        # by default, use SortedArray
+        self.engine = engine or SortedArray
 
         if columns is None:  # this creates a special exception for deep copying
             columns = []
@@ -314,7 +93,7 @@ class Index:
             raise ValueError("Cannot create index without at least one column")
         elif len(columns) == 1:
             col = columns[0]
-            row_index = Column(col.argsort(kind="stable"))
+            row_index = Column(col.argsort())
             data = Table([col[row_index]])
         else:
             num_rows = len(columns[0])
@@ -337,7 +116,7 @@ class Index:
             try:
                 lines = table[np.lexsort(sort_columns)]
             except TypeError:  # arbitrary mixins might not work with lexsort
-                lines = table[table.argsort(kind="stable")]
+                lines = table[table.argsort()]
             data = lines[lines.colnames[:-1]]
             row_index = lines[lines.colnames[-1]]
 
@@ -426,8 +205,9 @@ class Index:
             col_len = len(self.columns[0])
             return range(*row_specifier.indices(col_len))
         raise ValueError(
-            f"Expected int, array of ints, or slice but got {row_specifier} "
-            "in remove_rows"
+            "Expected int, array of ints, or slice but got {} in remove_rows".format(
+                row_specifier
+            )
         )
 
     def remove_rows(self, row_specifier):
@@ -448,7 +228,7 @@ class Index:
             rows.append(row)
         # second pass - row order is reversed to maintain
         # correct row numbers
-        for row in sorted(rows, reverse=True):
+        for row in reversed(sorted(rows)):
             self.data.shift_left(row)
 
     def remove_row(self, row, reorder=True):
@@ -458,12 +238,11 @@ class Index:
         Parameters
         ----------
         row : int
-            Table row number to remove in original table order
+            Position of row to remove
         reorder : bool
             Whether to reorder indices after removal
         """
-        # For removal, form a key consisting of column values in this row, where
-        # self.columns references the original columns.
+        # for removal, form a key consisting of column values in this row
         if not self.data.remove(tuple(col[row] for col in self.columns), row):
             raise ValueError(f"Could not remove row {row} from index")
         # decrement the row number of all later rows
@@ -627,12 +406,12 @@ class Index:
 
 
 class SlicedIndex:
-    """Class that provides the column-level interface for index operations.
-
-    This is wrapper around an Index object that allows for efficient slicing
-    functionality, but it is also used for an unsliced index. Since numpy expects array
-    slices to provide an actual data view, a SlicedIndex retrieves data directly from
-    the original index and then adapt it to the sliced coordinate system as appropriate.
+    """
+    This class provides a wrapper around an actual Index object
+    to make index slicing function correctly. Since numpy expects
+    array slices to provide an actual data view, a SlicedIndex should
+    retrieve data directly from the original index and then adapt
+    it to the sliced coordinate system as appropriate.
 
     Parameters
     ----------
@@ -641,9 +420,10 @@ class SlicedIndex:
     index_slice : tuple, slice
         The slice to which this SlicedIndex corresponds
     original : bool
-        Whether this SlicedIndex represents the original index itself. For the most part
-        this is similar to index[:] but certain copying operations are avoided, and the
-        slice retains the length of the actual index despite modification.
+        Whether this SlicedIndex represents the original index itself.
+        For the most part this is similar to index[:] but certain
+        copying operations are avoided, and the slice retains the
+        length of the actual index despite modification.
     """
 
     def __init__(self, index, index_slice, original=False):
@@ -658,11 +438,6 @@ class SlicedIndex:
             self.start, self._stop, self.step = index_slice.indices(num_rows)
         else:
             raise TypeError("index_slice must be tuple or slice")
-
-    @property
-    def id(self) -> tuple[str, ...]:
-        """Identifier for this index as tuple of index column names"""
-        return tuple(col.info.name for col in self.columns)
 
     @property
     def length(self):
@@ -881,27 +656,25 @@ def get_index(table, table_copy=None, names=None):
     return None
 
 
-def get_index_by_names(table: Table, names: tuple | list) -> SlicedIndex | None:
+def get_index_by_names(table, names):
     """
-    Return index in ``table`` keyed by ``names``, or `None` if not found.
+    Returns an index in ``table`` corresponding to the ``names`` columns or None
+    if no such index exists.
 
     Parameters
     ----------
     table : `Table`
         Input table
-    names : tuple, list
-        Key names of table index to find
-
-    Returns
-    -------
-    SlicedIndex or None
-        Table Index or None
+    nmaes : tuple, list
+        Column names
     """
-    index_id = tuple(names)
+    names = list(names)
     for index in table.indices:
-        if index_id == index.id:
+        index_names = [col.info.name for col in index.columns]
+        if index_names == names:
             return index
-    return None
+    else:
+        return None
 
 
 class _IndexModeContext:
@@ -943,7 +716,7 @@ class _IndexModeContext:
             raise ValueError(
                 "Expected a mode of either 'freeze', "
                 "'discard_on_copy', or 'copy_on_getitem', got "
-                f"'{mode}'"
+                "'{}'".format(mode)
             )
 
     def __enter__(self):
@@ -981,6 +754,7 @@ class _IndexModeContext:
         case where a copy of the indices is not needed.  See the docstring for
         ``astropy.table._column_mixins`` for more information on that.
         """
+
         if cls in self._col_subclasses:
             return self._col_subclasses[cls]
 
@@ -1002,7 +776,8 @@ class _IndexModeContext:
 
 class TableIndices(list):
     """
-    List-subclass of table indices allowing for retrieval by column name(s).
+    A special list of table indices allowing
+    for retrieval by column name(s).
 
     Parameters
     ----------
@@ -1013,7 +788,7 @@ class TableIndices(list):
     def __init__(self, lst):
         super().__init__(lst)
 
-    def __getitem__(self, item) -> Index:
+    def __getitem__(self, item):
         """
         Retrieve an item from the list of indices.
 
@@ -1040,108 +815,36 @@ class TableIndices(list):
         return super().__getitem__(item)
 
 
-@deprecated(
-    since="7.2.0",
-    message="""\
-Calling `Table.loc/iloc/loc_indices[index_id, item]` to select `item` from index
-`index_id` is deprecated. Instead select the index using the syntax
-`Table.loc/iloc/loc_indices.with_index(index_id)[item]`.
-""",
-)
-def interpret_item_as_index_id_and_item(item: tuple) -> tuple:
-    """Interpret the item as a (index_id, item) tuple."""
-    index_id, item = item
-    return index_id, item
-
-
 class TableLoc:
     """
-    Pseudo-list of Table rows allowing for retrieval of rows by indexed column values.
+    A pseudo-list of Table rows allowing for retrieval
+    of rows by indexed column values.
 
     Parameters
     ----------
     table : Table
         Indexed table to use
-    index_id : tuple or None
-        If not None, the index id as a tuple to use for all retrievals. If None
-        (default), the primary key index is used.
     """
 
-    def __init__(self, table: Table, index_id: tuple[str, ...] | None = None):
+    def __init__(self, table):
         self.table = table
         self.indices = table.indices
-        self.index_id = index_id
-
-    def __repr__(self):
-        index_id = self.index_id
-        if index_id is None:
-            index_id = self.table.primary_key
-        id_repr = index_id[0] if len(index_id) == 1 else index_id
-
-        return (
-            f"<{self.__class__.__name__} index_id={repr(id_repr)} "
-            f"id(table)={id(self.table)}>"
-        )
-
-    def with_index(self, *index_id):
-        """Return a new instance of this class for ``index_id``
-
-        Parameters
-        ----------
-        index_id : str, tuple[str, ...], or list[str]
-            Identifier of the index to use
-
-        Examples
-        --------
-        >>> from astropy.table import Table
-        >>> t = Table({'a': [1, 2, 3], 'b': [4, 5, 6], 'c': [7, 8, 9]})
-        >>> t.add_index('a')
-        >>> t.add_index(['b', 'c'])
-        >>> t.loc.with_index('a')[2]  # doctest: +IGNORE_OUTPUT
-        >>> t.loc.with_index('b', 'c')[5, 8]  # doctest: +IGNORE_OUTPUT
-        >>> t.loc.with_index(['b', 'c'])[5, 8]  # doctest: +IGNORE_OUTPUT
-        """
-        if len(index_id) == 1 and isinstance(index_id[0], (tuple, list)):
-            index_id = tuple(index_id[0])
-        return self.__class__(self.table, index_id)
-
-    def _get_index_id_and_item(self, item):
-        index_id = self.index_id
-        if self.index_id is None:
-            if isinstance(item, tuple):
-                index_id, item = interpret_item_as_index_id_and_item(item)
-            else:
-                index_id = self.table.primary_key
-        return index_id, item
-
-    def _get_row_idxs_as_list(self, index_id: tuple, item) -> list[int]:
-        """
-        Retrieve Table row indices for ``item`` as a list of integers.
-
-        Parameters
-        ----------
-        index_id : tuple of str
-            Identifier of the index to use.
-        item : column element, list, ndarray, or slice
-            Can be a value in the table index, a list/ndarray of such values, or a value
-            slice (both endpoints are included).
-
-        Returns
-        -------
-        list of int
-            List of row indices corresponding to the input item.
-
-        Raises
-        ------
-        ValueError
-            If the table has no indices.
-        KeyError
-            If no matches are found for a given key.
-        """
         if len(self.indices) == 0:
-            raise ValueError("Can only use TableLoc for a table with indices")
+            raise ValueError("Cannot create TableLoc object with no indices")
 
-        index = self.indices[index_id]
+    def _get_rows(self, item):
+        """
+        Retrieve Table rows indexes by value slice.
+        """
+
+        if isinstance(item, tuple):
+            key, item = item
+        else:
+            key = self.table.primary_key
+
+        index = self.indices[key]
+        if len(index.columns) > 1:
+            raise ValueError("Cannot use .loc on multi-column indices")
 
         if isinstance(item, slice):
             # None signifies no upper/lower bound
@@ -1153,39 +856,15 @@ class TableLoc:
                 item = [item]
             # item should be a list or ndarray of values
             rows = []
-            for value in item:
-                ii = index.find(value if isinstance(value, tuple) else (value,))
-                if len(ii) == 0:
-                    raise KeyError(f"No matches found for key {value}")
+            for key in item:
+                p = index.find((key,))
+                if len(p) == 0:
+                    raise KeyError(f"No matches found for key {key}")
                 else:
-                    rows.extend(ii)
+                    rows.extend(p)
         return rows
 
-    def _get_row_idxs_as_list_or_int(self, item) -> list[int] | int:
-        """Internal function to retrieve row indices for ``item`` as a list or int.
-
-        See ``__getitem__`` for details on the input item.
-        """
-        # This handles ``tbl.loc[<item>]`` and ``tbl.loc[<key>, <item>]`` (and the same
-        # for ``tbl.loc_indices``).
-        index_id, item = self._get_index_id_and_item(item)
-
-        item_is_sequence = isinstance(item, (list, np.ndarray))
-
-        # Short-circuit for case like tbl.loc[[]], returns tbl[[]]
-        if item_is_sequence and len(item) == 0:
-            return []
-
-        row_idxs = self._get_row_idxs_as_list(index_id, item)
-        # If ``item`` is a sequence of keys or a slice then always returns a list of
-        # rows, where zero rows is OK. Otherwise check output and possibly return a
-        # scalar.
-        if not (item_is_sequence or isinstance(item, slice)) and len(row_idxs) == 1:
-            row_idxs = row_idxs[0]
-
-        return row_idxs
-
-    def __getitem__(self, item) -> Table | Table.Row:
+    def __getitem__(self, item):
         """
         Retrieve Table rows by value slice.
 
@@ -1197,13 +876,13 @@ class TableLoc:
             If a tuple is provided, the first element must be
             an index to use instead of the primary key, and the
             second element must be as above.
-
-        Returns
-        -------
-        Table | Row
-            A table slice or Row corresponding to the input item.
         """
-        rows = self._get_row_idxs_as_list_or_int(item)
+        rows = self._get_rows(item)
+
+        if len(rows) == 0:  # no matches found
+            raise KeyError(f"No matches found for key {item}")
+        elif len(rows) == 1:  # single row
+            return self.table[rows[0]]
         return self.table[rows]
 
     def __setitem__(self, key, value):
@@ -1222,21 +901,23 @@ class TableLoc:
         value : New values of the row elements.
                 Can be a list of tuples/lists to update the row.
         """
-        rows = self._get_row_idxs_as_list_or_int(key)
-        if hasattr(rows, "__len__"):
+        rows = self._get_rows(key)
+        if len(rows) == 0:  # no matches found
+            raise KeyError(f"No matches found for key {key}")
+        elif len(rows) == 1:  # single row
+            self.table[rows[0]] = value
+        else:  # multiple rows
             if len(rows) == len(value):
                 for row, val in zip(rows, value):
                     self.table[row] = val
             else:
                 raise ValueError(f"Right side should contain {len(rows)} values")
-        else:
-            self.table[rows] = value
 
 
 class TableLocIndices(TableLoc):
     def __getitem__(self, item):
         """
-        Retrieve Table row indices by value slice.
+        Retrieve Table row's indices by value slice.
 
         Parameters
         ----------
@@ -1247,7 +928,11 @@ class TableLocIndices(TableLoc):
                an index to use instead of the primary key, and the
                second element must be as above.
         """
-        rows = self._get_row_idxs_as_list_or_int(item)
+        rows = self._get_rows(item)
+        if len(rows) == 0:  # no matches found
+            raise KeyError(f"No matches found for key {item}")
+        elif len(rows) == 1:  # single row
+            return rows[0]
         return rows
 
 
@@ -1262,12 +947,15 @@ class TableILoc(TableLoc):
         Indexed table to use
     """
 
-    def __getitem__(self, item):
-        if len(self.indices) == 0:
-            raise ValueError("Can only use TableILoc for a table with indices")
+    def __init__(self, table):
+        super().__init__(table)
 
-        index_id, item = self._get_index_id_and_item(item)
-        index = self.indices[index_id]
+    def __getitem__(self, item):
+        if isinstance(item, tuple):
+            key, item = item
+        else:
+            key = self.table.primary_key
+        index = self.indices[key]
         rows = index.sorted_data()[item]
         table_slice = self.table[rows]
 

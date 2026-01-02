@@ -5,17 +5,54 @@ Helper functions for table development, mostly creating useful
 tables for testing.
 """
 
+
 import string
-import warnings
 from itertools import cycle
 
 import numpy as np
 
-from astropy.io.votable.table import parse
-from astropy.utils.data import get_pkg_data_filename
 from astropy.utils.data_info import ParentDtypeInfo
 
 from .table import Column, Table
+
+
+class TimingTables:
+    """
+    Object which contains two tables and various other attributes that
+    are useful for timing and other API tests.
+    """
+
+    def __init__(self, size=1000, masked=False):
+        self.masked = masked
+
+        # Initialize table
+        self.table = Table(masked=self.masked)
+
+        # Create column with mixed types
+        np.random.seed(12345)
+        self.table["i"] = np.arange(size)
+        self.table["a"] = np.random.random(size)  # float
+        self.table["b"] = np.random.random(size) > 0.5  # bool
+        self.table["c"] = np.random.random((size, 10))  # 2d column
+        self.table["d"] = np.random.choice(np.array(list(string.ascii_letters)), size)
+
+        self.extra_row = {"a": 1.2, "b": True, "c": np.repeat(1, 10), "d": "Z"}
+        self.extra_column = np.random.randint(0, 100, size)
+        self.row_indices = np.where(self.table["a"] > 0.9)[0]
+        self.table_grouped = self.table.group_by("d")
+
+        # Another table for testing joining
+        self.other_table = Table(masked=self.masked)
+        self.other_table["i"] = np.arange(1, size, 3)
+        self.other_table["f"] = np.random.random()
+        self.other_table.sort("f")
+
+        # Another table for testing hstack
+        self.other_table_2 = Table(masked=self.masked)
+        self.other_table_2["g"] = np.random.random(size)
+        self.other_table_2["h"] = np.random.random((size, 10))
+
+        self.bool_mask = self.table["a"] > 0.6
 
 
 def simple_table(size=3, cols=None, kinds="ifS", masked=False):
@@ -57,7 +94,7 @@ def simple_table(size=3, cols=None, kinds="ifS", masked=False):
 
     columns = []
     names = [chr(ord("a") + ii) for ii in range(cols)]
-    letters = np.array(list(string.ascii_letters))
+    letters = np.array([c for c in string.ascii_letters])
     for jj, kind in zip(range(cols), cycle(kinds)):
         if kind == "i":
             data = np.arange(1, size + 1, dtype=np.int64) + jj
@@ -69,7 +106,7 @@ def simple_table(size=3, cols=None, kinds="ifS", masked=False):
         elif kind == "O":
             indices = (np.arange(size) + jj) % len(letters)
             vals = letters[indices]
-            data = [{val.item(): index.item()} for val, index in zip(vals, indices)]
+            data = [{val: index} for val, index in zip(vals, indices)]
         else:
             raise ValueError("Unknown data kind")
         columns.append(Column(data))
@@ -88,6 +125,11 @@ def complex_table():
     Return a masked table from the io.votable test set that has a wide variety
     of stressing types.
     """
+    import warnings
+
+    from astropy.io.votable.table import parse
+    from astropy.utils.data import get_pkg_data_filename
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         votable = parse(
@@ -118,7 +160,7 @@ class ArrayWrapperInfo(ParentDtypeInfo):
 
 class ArrayWrapper:
     """
-    Minimal mixin using a simple wrapper around a numpy array.
+    Minimal mixin using a simple wrapper around a numpy array
 
     TODO: think about the future of this class as it is mostly for demonstration
     purposes (of the mixin protocol). Consider taking it out of core and putting
@@ -130,12 +172,7 @@ class ArrayWrapper:
     info = ArrayWrapperInfo()
 
     def __init__(self, data, copy=True):
-        if isinstance(data, ArrayWrapper):
-            # this is done to preserve byteorder through copies
-            arr = data.data
-        else:
-            arr = data
-        self.data = np.array(arr, copy=copy)
+        self.data = np.array(data, copy=copy)
         if "info" in getattr(data, "__dict__", ()):
             self.info = data.info
 
@@ -155,7 +192,7 @@ class ArrayWrapper:
         return len(self.data)
 
     def __eq__(self, other):
-        """Minimal equality testing, mostly for mixin unit tests."""
+        """Minimal equality testing, mostly for mixin unit tests"""
         if isinstance(other, ArrayWrapper):
             return self.data == other.data
         else:

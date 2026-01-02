@@ -9,6 +9,7 @@ basic.py:
 :Author: Tom Aldcroft (aldcroft@head.cfa.harvard.edu)
 """
 
+
 import re
 
 from . import core
@@ -16,7 +17,7 @@ from . import core
 
 class BasicHeader(core.BaseHeader):
     """
-    Basic table Header Reader.
+    Basic table Header Reader
 
     Set a few defaults for common ascii table formats
     (start at line 0, comments begin with ``#`` and possibly white space)
@@ -29,7 +30,7 @@ class BasicHeader(core.BaseHeader):
 
 class BasicData(core.BaseData):
     """
-    Basic table Data Reader.
+    Basic table Data Reader
 
     Set a few defaults for common ascii table formats
     (start at line 1, comments begin with ``#`` and possibly white space)
@@ -56,7 +57,6 @@ class Basic(core.BaseReader):
       1 2 3
       4 5 6
     """
-
     _format_name = "basic"
     _description = "Basic table with custom delimiters"
     _io_registry_format_aliases = ["ascii"]
@@ -67,7 +67,7 @@ class Basic(core.BaseReader):
 
 class NoHeaderHeader(BasicHeader):
     """
-    Reader for table header without a header.
+    Reader for table header without a header
 
     Set the start of header line number to `None`, which tells the basic
     reader there is no header line.
@@ -78,7 +78,7 @@ class NoHeaderHeader(BasicHeader):
 
 class NoHeaderData(BasicData):
     """
-    Reader for table data without a header.
+    Reader for table data without a header
 
     Data starts at first uncommented line since there is no header line.
     """
@@ -182,7 +182,7 @@ class CommentedHeader(Basic):
 
 
 class TabHeaderSplitter(core.DefaultSplitter):
-    """Split lines on tab and do not remove whitespace."""
+    """Split lines on tab and do not remove whitespace"""
 
     delimiter = "\t"
 
@@ -192,7 +192,7 @@ class TabHeaderSplitter(core.DefaultSplitter):
 
 class TabDataSplitter(TabHeaderSplitter):
     """
-    Don't strip data value whitespace since that is significant in TSV tables.
+    Don't strip data value whitespace since that is significant in TSV tables
     """
 
     process_val = None
@@ -201,7 +201,7 @@ class TabDataSplitter(TabHeaderSplitter):
 
 class TabHeader(BasicHeader):
     """
-    Reader for header of tables with tab separated header.
+    Reader for header of tables with tab separated header
     """
 
     splitter_class = TabHeaderSplitter
@@ -209,7 +209,7 @@ class TabHeader(BasicHeader):
 
 class TabData(BasicData):
     """
-    Reader for data of tables with tab separated data.
+    Reader for data of tables with tab separated data
     """
 
     splitter_class = TabDataSplitter
@@ -237,7 +237,7 @@ class Tab(Basic):
 
 class CsvSplitter(core.DefaultSplitter):
     """
-    Split on comma for CSV (comma-separated-value) tables.
+    Split on comma for CSV (comma-separated-value) tables
     """
 
     delimiter = ","
@@ -245,7 +245,7 @@ class CsvSplitter(core.DefaultSplitter):
 
 class CsvHeader(BasicHeader):
     """
-    Header that uses the :class:`astropy.io.ascii.basic.CsvSplitter`.
+    Header that uses the :class:`astropy.io.ascii.basic.CsvSplitter`
     """
 
     splitter_class = CsvSplitter
@@ -255,7 +255,7 @@ class CsvHeader(BasicHeader):
 
 class CsvData(BasicData):
     """
-    Data that uses the :class:`astropy.io.ascii.basic.CsvSplitter`.
+    Data that uses the :class:`astropy.io.ascii.basic.CsvSplitter`
     """
 
     splitter_class = CsvSplitter
@@ -327,7 +327,7 @@ class Csv(Basic):
 
 class RdbHeader(TabHeader):
     """
-    Header for RDB tables.
+    Header for RDB tables
     """
 
     col_type_map = {"n": core.NumType, "s": core.StrType}
@@ -395,33 +395,17 @@ class RdbData(TabData):
 
 
 class Rdb(Tab):
-    """Tab-delimited table with a column name row and a type definition row.
+    """Tab-separated file with an extra line after the column definition line that
+    specifies either numeric (N) or string (S) data.
 
-    The ``rdb`` format is a legacy format that was originally created in 1991 as the
-    basis for a suite of Unix command-line relational database utilities.
+    See: https://www.drdobbs.com/rdb-a-unix-command-line-database/199101326
 
-    The ``rdb`` format is defined as follows:
+    Example::
 
-    - The table text starts with zero or more comment lines that begin with ``#``.
-    - Comments are allowed only at the beginning of the table.
-    - First row after the (optional) comments specifies the column names.
-    - Second row after the comments specifies the data types:
+      col1 <tab> col2 <tab> col3
+      N <tab> S <tab> N
+      1 <tab> 2 <tab> 5
 
-      - Data type can be either ``S`` for string or ``N`` for numeric (case-insensitive).
-      - Data type specifier can optionally be preceded with an integer to indicate the
-        width when printing the table, but the ``astropy`` reader ignores it.
-    - Subsequent rows contain the data values.
-    - All row entries in the header and data are separated by a tab character.
-
-    Example (where the added spaces are for visual clarity)::
-
-        # Comment line
-        # -----------------
-        name <tab> age <tab> eye-color
-        6S <tab> 5N <tab> S
-        Bob  <tab> 45 <tab> blue
-        Mary <tab> 32 <tab> brown
-        Jill <tab> 80 <tab> hazel
     """
 
     _format_name = "rdb"

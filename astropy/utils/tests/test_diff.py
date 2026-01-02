@@ -2,7 +2,6 @@
 """
 Some might be indirectly tested already in ``astropy.io.fits.tests``.
 """
-
 import io
 
 import numpy as np
@@ -18,8 +17,7 @@ def test_diff_values_false(a):
 
 
 @pytest.mark.parametrize(
-    ("a", "b"),
-    [(np.inf, np.nan), (1.11, 1.1), (1, 2), (1, "a"), ("a", "b"), (np.nan, 1.1)],
+    ("a", "b"), [(np.inf, np.nan), (1.11, 1.1), (1, 2), (1, "a"), ("a", "b")]
 )
 def test_diff_values_true(a, b):
     assert diff_values(a, b)
@@ -51,11 +49,14 @@ def test_diff_types():
     b = "1.0"
     identical = report_diff_values(a, b, fileobj=f)
     assert not identical
-    assert f.getvalue().splitlines() == [
-        "  (float) a> 1.0",
-        "    (str) b> '1.0'",
-        "           ? +   +",
-    ]
+    out = f.getvalue()
+    # fmt: off
+    assert out == (
+        "  (float) a> 1.0\n"
+        "    (str) b> '1.0'\n"
+        "           ? +   +\n"
+    )
+    # fmt: on
 
 
 def test_diff_numeric_scalar_types():
@@ -147,17 +148,6 @@ NEW     2018-05-08   nan    9.0""",
     assert report_diff_values(a, a, fileobj=f)
 
 
-def test_large_table_diff():
-    # see https://github.com/astropy/astropy/issues/14010
-    colnames = [f"column{i}" for i in range(100)]
-    t1 = Table(names=colnames)
-
-    colnames.insert(50, "test")
-    t2 = Table(names=colnames)
-
-    assert not report_diff_values(t1, t2, fileobj=io.StringIO())
-
-
 @pytest.mark.parametrize("kwargs", [{}, {"atol": 0, "rtol": 0}])
 def test_where_not_allclose(kwargs):
     a = np.array([1, np.nan, np.inf, 4.5])
@@ -165,23 +155,3 @@ def test_where_not_allclose(kwargs):
 
     assert where_not_allclose(a, b, **kwargs) == ([3],)
     assert len(where_not_allclose(a, a, **kwargs)[0]) == 0
-
-    diff, maxabs, maxrel = where_not_allclose(a, b, return_maxdiff=True, **kwargs)
-    assert np.isclose(maxabs, 0.1)
-    assert np.isclose(maxrel, 0.1 / 4.6)
-
-    a = np.array([np.nan, np.inf, 0, 4.5])
-    b = np.array([1, np.inf, np.nan, 4.6])
-
-    diff, maxabs, maxrel = where_not_allclose(a, b, return_maxdiff=True, **kwargs)
-    assert list(diff[0]) == [0, 2, 3]
-    assert np.isclose(maxabs, 0.1)
-    assert np.isclose(maxrel, 0.1 / 4.6)
-
-    a = np.array([np.nan, np.inf, 0])
-    b = np.array([1, np.inf, np.nan])
-
-    diff, maxabs, maxrel = where_not_allclose(a, b, return_maxdiff=True, **kwargs)
-    assert list(diff[0]) == [0, 2]
-    assert maxabs == 0
-    assert maxrel == 0

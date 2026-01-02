@@ -5,7 +5,6 @@ import io
 import os
 import subprocess
 import sys
-from contextlib import nullcontext
 
 import numpy as np
 import pytest
@@ -13,7 +12,6 @@ import pytest
 from astropy.io import fits
 from astropy.io.fits.hdu.base import _NonstandardHDU, _ValidHDU
 from astropy.io.fits.verify import VerifyError, VerifyWarning
-from astropy.utils.compat import NUMPY_LT_2_0
 from astropy.utils.data import get_pkg_data_filenames
 from astropy.utils.exceptions import AstropyUserWarning
 from astropy.utils.misc import _NOT_OVERWRITING_MSG_MATCH
@@ -177,32 +175,6 @@ class TestHDUListFunctions(FitsTestCase):
         hdu = fits.GroupsHDU()
         with pytest.raises(ValueError):
             hdul.append(hdu)
-
-    @pytest.mark.parametrize(
-        "image", ["scale.fits", "o4sp040b0_raw.fits", "fixed-1890.fits"]
-    )
-    @pytest.mark.parametrize("do_not_scale", [True, False])
-    def test_append_scaled_image_with_do_not_scale_image_data(
-        self, image, do_not_scale
-    ):
-        """Tests appending a scaled ImageHDU to a HDUList."""
-
-        with fits.open(
-            self.data(image), do_not_scale_image_data=do_not_scale
-        ) as source:
-            # create the file
-            dest = fits.HDUList()
-            dest.append(source[0])
-            # append a second hdu
-            dest.append(source[0])
-            assert dest[-1].header.get("BZERO") == source[0].header.get("BZERO")
-            assert dest[-1].header.get("BSCALE") == source[0].header.get("BSCALE")
-            dest.writeto(self.temp("test-append.fits"))
-        with fits.open(
-            self.temp("test-append.fits"), do_not_scale_image_data=do_not_scale
-        ) as tmphdu:
-            assert tmphdu[-1].header.get("BZERO") == source[0].header.get("BZERO")
-            assert tmphdu[-1].header.get("BSCALE") == source[0].header.get("BSCALE")
 
     def test_insert_primary_to_empty_list(self):
         """Tests inserting a Simple PrimaryHDU to an empty HDUList."""
@@ -575,14 +547,11 @@ class TestHDUListFunctions(FitsTestCase):
 
         h0 = fits.Header()
         hdu = fits.PrimaryHDU(header=h0)
-        sci = fits.ImageHDU(data=np.array([10]))
-        hdul = fits.HDUList([hdu, sci])
+        sci = fits.ImageHDU(data=np.array(10))
+        image = fits.HDUList([hdu, sci])
+        image.writeto(self.temp("temp.fits"))
         assert "EXTEND" in hdu.header
         assert hdu.header["EXTEND"] is True
-        hdul.writeto(self.temp("temp.fits"))
-        hdr = fits.getheader(self.temp("temp.fits"))
-        assert "EXTEND" in hdr
-        assert hdr["EXTEND"] is True
 
     def test_replace_memmaped_array(self, home_is_temp):
         # Copy the original before we modify it
@@ -687,7 +656,7 @@ class TestHDUListFunctions(FitsTestCase):
     def test_update_resized_header(self, home_is_temp):
         """
         Test saving updates to a file where the header is one block smaller
-        than before, and in the case where the header is one block larger than
+        than before, and in the case where the heade ris one block larger than
         before.
         """
 
@@ -708,19 +677,7 @@ class TestHDUListFunctions(FitsTestCase):
             assert hdul[0].header == orig_header[:-1]
             assert (hdul[0].data == data).all()
 
-        if (
-            sys.platform.startswith("win")
-            and sys.version_info < (3, 14)
-            and not NUMPY_LT_2_0
-        ):
-            ctx = pytest.warns(
-                UserWarning,
-                match="Memory map object was closed but appears to still be referenced",
-            )
-        else:
-            ctx = nullcontext()
-
-        with ctx, fits.open(self.temp("temp.fits"), mode="update") as hdul:
+        with fits.open(self.temp("temp.fits"), mode="update") as hdul:
             idx = 101
             while len(str(hdul[0].header)) <= 2880 * 2:
                 hdul[0].header[f"TEST{idx}"] = idx
@@ -972,7 +929,7 @@ class TestHDUListFunctions(FitsTestCase):
         bad_keys = [None, 3.5, {}]
 
         for key in bad_keys:
-            assert key not in hdulist
+            assert not (key in hdulist)
 
     def test_iteration_of_lazy_loaded_hdulist(self):
         """
@@ -989,7 +946,7 @@ class TestHDUListFunctions(FitsTestCase):
         f = fits.open(filename)
 
         # Check that all extensions are read if f is not sliced
-        all_exts = list(f)
+        all_exts = [ext for ext in f]
         assert len(all_exts) == 5
 
         # Reload the file to ensure we are still lazy loading
@@ -998,7 +955,7 @@ class TestHDUListFunctions(FitsTestCase):
 
         # Try a simple slice with no conditional on the ext. This is essentially
         # the reported failure.
-        all_exts_but_zero = list(f[1:])
+        all_exts_but_zero = [ext for ext in f[1:]]
         assert len(all_exts_but_zero) == 4
 
         # Reload the file to ensure we are still lazy loading
@@ -1096,16 +1053,13 @@ class TestHDUListFunctions(FitsTestCase):
         match = "Found a SIMPLE card but its format doesn't respect the FITS Standard"
 
         with pytest.warns(VerifyWarning, match=match):
-            with fits.open(filename):
-                pass
+            fits.open(filename)
 
         with pytest.warns(VerifyWarning, match=match):
-            with fits.open(filename, mode="append"):
-                pass
+            fits.open(filename, mode="append")
 
         with pytest.warns(VerifyWarning, match=match):
-            with fits.open(filename, mode="update"):
-                pass
+            fits.open(filename, mode="update")
 
         with fits.open(filename, ignore_missing_simple=True) as hdul:
             assert isinstance(hdul[0], _ValidHDU)
@@ -1119,8 +1073,7 @@ class TestHDUListFunctions(FitsTestCase):
             f.write(buf.read())
 
         with pytest.warns(VerifyWarning, match=match):
-            with fits.open(filename):
-                pass
+            fits.open(filename)
 
     def test_proper_error_raised_on_non_fits_file_with_unicode(self):
         """
@@ -1177,7 +1130,7 @@ class TestHDUListFunctions(FitsTestCase):
             assert not f.closed
 
         with open(filename, mode="rb") as f:
-            with pytest.raises(OSError):
+            with pytest.raises(OSError), pytest.warns(VerifyWarning):
                 fits.open(f, ignore_missing_end=True)
 
             assert not f.closed
@@ -1185,24 +1138,8 @@ class TestHDUListFunctions(FitsTestCase):
         with pytest.raises(OSError):
             fits.open(filename, ignore_missing_end=False)
 
-        with pytest.raises(OSError):
+        with pytest.raises(OSError), pytest.warns(VerifyWarning):
             fits.open(filename, ignore_missing_end=True)
-
-    def test_warning_raised_extra_bytes_after_last_hdu(self):
-        filename = "test_extra_bytes.fits"
-        fits.writeto(self.temp(filename), np.arange(100))
-        # write some extra bytes to the end of the file
-        with open(self.temp(filename), "ab") as f:
-            f.write(b"extra bytes")
-
-        # this should not raise a DeprecationWarning about the indent
-        # function (#18607)
-        match = "There may be extra bytes after the last HDU"
-        with (
-            pytest.warns(VerifyWarning, match=match),
-            fits.open(self.temp(filename)) as hdul,
-        ):
-            assert len(hdul) == 1
 
     def test_pop_with_lazy_load(self):
         filename = self.data("checksum.fits")

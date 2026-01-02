@@ -6,8 +6,7 @@ Index engine for Tables.
 """
 
 from collections import OrderedDict
-from collections.abc import Hashable, Mapping, Sequence
-from numbers import Integral
+from itertools import starmap
 
 from astropy.utils.compat.optional_deps import HAS_SORTEDCONTAINERS
 
@@ -79,25 +78,25 @@ class SCEngine:
             raise ImportError("sortedcontainers is needed for using SCEngine")
 
         node_keys = map(tuple, data)
-        self._nodes = SortedList(map(Node, node_keys, row_index))
+        self._nodes = SortedList(starmap(Node, zip(node_keys, row_index)))
         self._unique = unique
 
-    def add(self, key: tuple, row: int) -> None:
+    def add(self, key, value):
         """
         Add a key, value pair.
         """
         if self._unique and (key in self._nodes):
             message = f"duplicate {key!r} in unique index"
             raise ValueError(message)
-        self._nodes.add(Node(key, row))
+        self._nodes.add(Node(key, value))
 
-    def find(self, key: tuple) -> Sequence[Integral]:
+    def find(self, key):
         """
         Find rows corresponding to the given key.
         """
         return [node.value for node in self._nodes.irange(key, key)]
 
-    def remove(self, key: tuple, data: int) -> bool:
+    def remove(self, key, data=None):
         """
         Remove data from the given key.
         """
@@ -113,7 +112,7 @@ class SCEngine:
             self._nodes.remove(item)
         return bool(items)
 
-    def shift_left(self, row: int) -> None:
+    def shift_left(self, row):
         """
         Decrement rows larger than the given row.
         """
@@ -121,7 +120,7 @@ class SCEngine:
             if node.value > row:
                 node.value -= 1
 
-    def shift_right(self, row: int) -> None:
+    def shift_right(self, row):
         """
         Increment rows greater than or equal to the given row.
         """
@@ -129,7 +128,7 @@ class SCEngine:
             if node.value >= row:
                 node.value += 1
 
-    def items(self) -> list[tuple[Hashable, list[Integral]]]:
+    def items(self):
         """
         Return a list of key, data tuples.
         """
@@ -139,9 +138,9 @@ class SCEngine:
                 result[node.key].append(node.value)
             else:
                 result[node.key] = [node.value]
-        return list(result.items())
+        return result.items()
 
-    def sort(self) -> None:
+    def sort(self):
         """
         Make row order align with key order.
         """
@@ -154,19 +153,14 @@ class SCEngine:
         """
         return [node.value for node in self._nodes]
 
-    def range(
-        self,
-        lower: tuple[Hashable, ...],
-        upper: tuple[Hashable, ...],
-        bounds: tuple[bool, bool],
-    ) -> list[int]:
+    def range(self, lower, upper, bounds=(True, True)):
         """
         Return row values in the given range.
         """
         iterator = self._nodes.irange(lower, upper, bounds)
         return [node.value for node in iterator]
 
-    def replace_rows(self, row_map: "Mapping[int, int]") -> None:
+    def replace_rows(self, row_map):
         """
         Replace rows with the values in row_map.
         """

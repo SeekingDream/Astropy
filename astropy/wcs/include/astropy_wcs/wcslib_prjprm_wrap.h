@@ -4,7 +4,7 @@
 #include "pyutil.h"
 #include "wcs.h"
 
-extern PyObject* PyPrjprmType;
+extern PyTypeObject PyPrjprmType;
 
 typedef struct {
     PyObject_HEAD

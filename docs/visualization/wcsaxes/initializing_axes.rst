@@ -41,7 +41,7 @@ axes object:
    :align: center
 
     import matplotlib.pyplot as plt
-    fig, ax = plt.subplots(subplot_kw=dict(projection=wcs))
+    ax = plt.subplot(projection=wcs)
 
 The ``ax`` object created is an instance of the
 :class:`~astropy.visualization.wcsaxes.WCSAxes` class. Note that if no WCS

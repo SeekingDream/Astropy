@@ -13,7 +13,7 @@ well-defined but idiosyncratic formats.
 
 * :class:`~astropy.io.ascii.AASTex`: AASTeX `deluxetable <https://fits.gsfc.nasa.gov/standard30/deluxetable.sty>`_ used for AAS journals.
 * :class:`~astropy.io.ascii.Basic`: basic table with customizable delimiters and header configurations.
-* :class:`~astropy.io.ascii.Cds`: `CDS format table <https://vizier.unistra.fr/doc/catstd.htx>`_ (also Vizier and ApJ machine readable tables).
+* :class:`~astropy.io.ascii.Cds`: `CDS format table <http://vizier.u-strasbg.fr/doc/catstd.htx>`_ (also Vizier and ApJ machine readable tables).
 * :class:`~astropy.io.ascii.CommentedHeader`: column names given in a line that begins with the comment character.
 * :class:`~astropy.io.ascii.Csv`: comma-separated values.
 * :class:`~astropy.io.ascii.Daophot`: table from the IRAF DAOphot package.
@@ -29,4 +29,3 @@ well-defined but idiosyncratic formats.
 * :class:`~astropy.io.ascii.RST`: `reStructuredText simple format table <https://docutils.sourceforge.io/docs/ref/rst/restructuredtext.html#simple-tables>`_.
 * :class:`~astropy.io.ascii.SExtractor`: `SExtractor format table <https://sextractor.readthedocs.io/en/latest/>`_.
 * :class:`~astropy.io.ascii.Tab`: tab-separated values.
-* :class:`~astropy.io.ascii.Tdat`: Transportable Database Aggregate Table format

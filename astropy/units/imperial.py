@@ -1,8 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
-"""Colloquially used Imperial units.
-
-These units are available in the `astropy.units.imperial` namespace, but not in the
+"""
+This package defines colloquially used Imperial units.  They are
+available in the `astropy.units.imperial` namespace, but not in the
 top-level `astropy.units` namespace, e.g.::
 
     >>> import astropy.units as u
@@ -16,14 +16,10 @@ To include them in `~astropy.units.UnitBase.compose` and the results of
     >>> import astropy.units as u
     >>> u.imperial.enable()  # doctest: +SKIP
 """
-# avoid ruff complaints about undefined names defined by def_unit
-# ruff: noqa: F821
 
-__all__: list[str] = ["enable"]  #  Units are added at the end
 
 from . import si
-from .core import add_enabled_units, def_unit
-from .docgen import generate_dunder_all, generate_unit_summary
+from .core import UnitBase, def_unit
 
 _ns = globals()
 
@@ -148,21 +144,27 @@ def_unit(
 )
 def_unit(
     ["deg_R", "Rankine"],
-    5 / 9 * si.K,
     namespace=_ns,
     doc="Rankine scale: absolute scale of thermodynamic temperature",
-    format={"latex": r"{}^{\circ}R", "unicode": "°R"},
 )
 
-###########################################################################
-# ALL & DOCSTRING
 
-__all__ += generate_dunder_all(globals())  # noqa: PLE0605
+###########################################################################
+# CLEANUP
+
+del UnitBase
+del def_unit
+
+
+###########################################################################
+# DOCSTRING
 
 if __doc__ is not None:
     # This generates a docstring for this module that describes all of the
     # standard units defined here.
-    __doc__ += generate_unit_summary(globals())
+    from .utils import generate_unit_summary as _generate_unit_summary
+
+    __doc__ += _generate_unit_summary(globals())
 
 
 def enable():
@@ -174,4 +176,10 @@ def enable():
     This may be used with the ``with`` statement to enable Imperial
     units only temporarily.
     """
-    return add_enabled_units(globals())
+    # Local import to avoid cyclical import
+    # Local import to avoid polluting namespace
+    import inspect
+
+    from .core import add_enabled_units
+
+    return add_enabled_units(inspect.getmodule(enable))

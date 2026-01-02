@@ -4,48 +4,20 @@
 This module contains functions for matching coordinate catalogs.
 """
 
-from typing import NamedTuple
-
 import numpy as np
-from numpy.typing import NDArray
 
-from astropy.units import Quantity
+from astropy import units as u
 
 from . import Angle
 from .representation import UnitSphericalRepresentation
 from .sky_coordinate import SkyCoord
 
 __all__ = [
-    "CoordinateMatchResult",
-    "CoordinateSearchResult",
     "match_coordinates_3d",
     "match_coordinates_sky",
     "search_around_3d",
     "search_around_sky",
 ]
-
-
-class CoordinateMatchResult(NamedTuple):
-    """Results of matching a set of sources to a catalog.
-
-    See Also
-    --------
-    astropy.coordinates.match_coordinates_3d
-    astropy.coordinates.match_coordinates_sky
-    SkyCoord.match_to_catalog_3d
-    SkyCoord.match_to_catalog_sky
-    """
-
-    indices_to_catalog: NDArray[np.int32] | NDArray[np.int64]
-    """For each source the index of the match in the catalog."""
-    angular_separation: Angle
-    """The angular separation between each source and its match
-    in the catalog."""
-    physical_separation: Quantity
-    """The physical separation between each source and its match in the
-    catalog. If the sources or the catalog lack distances then the
-    physical separations are computed assuming all coordinates are
-    points on the unit sphere."""
 
 
 def match_coordinates_3d(
@@ -81,10 +53,15 @@ def match_coordinates_3d(
 
     Returns
     -------
-    CoordinateMatchResult
-        A `~typing.NamedTuple` with attributes representing for each
-        source in ``matchcoord`` the indices and angular and physical
-        separations of the match in ``catalogcoord``.
+    idx : int array
+        Indices into ``catalogcoord`` to get the matched points for each
+        ``matchcoord``. Shape matches ``matchcoord``.
+    sep2d : `~astropy.coordinates.Angle`
+        The on-sky separation between the closest match for each ``matchcoord``
+        and the ``matchcoord``. Shape matches ``matchcoord``.
+    dist3d : `~astropy.units.Quantity` ['length']
+        The 3D distance between the closest match for each ``matchcoord`` and
+        the ``matchcoord``. Shape matches ``matchcoord``.
 
     Notes
     -----
@@ -119,7 +96,7 @@ def match_coordinates_3d(
         idx = idx[:, -1]
 
     sep2d = catalogcoord[idx].separation(matchcoord)
-    return CoordinateMatchResult(
+    return (
         idx.reshape(matchxyz.shape[1:]),
         sep2d,
         dist.reshape(matchxyz.shape[1:]) * catunit,
@@ -159,13 +136,17 @@ def match_coordinates_sky(
 
     Returns
     -------
-    CoordinateMatchResult
-        A `~typing.NamedTuple` with attributes representing for each
-        source in ``matchcoord`` the indices and angular and physical
-        separations of the match in ``catalogcoord``. If either
-        ``matchcoord`` or ``catalogcoord`` lack distances, the physical
-        separation is the 3D distance on the unit sphere, rather than a
-        true distance.
+    idx : int array
+        Indices into ``catalogcoord`` to get the matched points for each
+        ``matchcoord``. Shape matches ``matchcoord``.
+    sep2d : `~astropy.coordinates.Angle`
+        The on-sky separation between the closest match for each
+        ``matchcoord`` and the ``matchcoord``. Shape matches ``matchcoord``.
+    dist3d : `~astropy.units.Quantity` ['length']
+        The 3D distance between the closest match for each ``matchcoord`` and
+        the ``matchcoord``. Shape matches ``matchcoord``.  If either
+        ``matchcoord`` or ``catalogcoord`` don't have a distance, this is the 3D
+        distance on the unit sphere, rather than a true distance.
 
     Notes
     -----
@@ -213,32 +194,7 @@ def match_coordinates_sky(
         # the old backwards-compatible name
         catalogcoord.cache["kdtree"] = newcat_u.cache["kdtree"]
 
-    return CoordinateMatchResult(idx, sep2d, sep3d)
-
-
-class CoordinateSearchResult(NamedTuple):
-    """Results of searching close pairs between two sets of sources.
-
-    See Also
-    --------
-    astropy.coordinates.search_around_3d
-    astropy.coordinates.search_around_sky
-    SkyCoord.search_around_3d
-    SkyCoord.search_around_sky
-    """
-
-    indices_to_first_set: NDArray[np.int32] | NDArray[np.int64]
-    """Indices of the elements of the found pairs in the first set of
-    sources."""
-    indices_to_second_set: NDArray[np.int32] | NDArray[np.int64]
-    """Indices of the elements of the found pairs in the second set of
-    sources."""
-    angular_separation: Angle
-    """The angular separations between the paired sources."""
-    physical_separation: Quantity
-    """The physical separations between the paired sources. If either of
-    the source sets lack distances then the physical separations are
-    computed assuming all coordinates are points on the unit sphere."""
+    return idx, sep2d, sep3d
 
 
 def search_around_3d(coords1, coords2, distlimit, storekdtree="kdtree_3d"):
@@ -254,13 +210,12 @@ def search_around_3d(coords1, coords2, distlimit, storekdtree="kdtree_3d"):
     ----------
     coords1 : `~astropy.coordinates.BaseCoordinateFrame` or `~astropy.coordinates.SkyCoord`
         The first set of coordinates, which will be searched for matches from
-        ``coords2`` within ``seplimit``.  Must be a one-dimensional coordinate array.
+        ``coords2`` within ``seplimit``.  Cannot be a scalar coordinate.
     coords2 : `~astropy.coordinates.BaseCoordinateFrame` or `~astropy.coordinates.SkyCoord`
         The second set of coordinates, which will be searched for matches from
-        ``coords1`` within ``seplimit``.  Must be a one-dimensional coordinate array.
+        ``coords1`` within ``seplimit``.  Cannot be a scalar coordinate.
     distlimit : `~astropy.units.Quantity` ['length']
-        The physical radius to search within. It should be broadcastable to the
-        same shape as ``coords1``.
+        The physical radius to search within.
     storekdtree : bool or str, optional
         If a string, will store the KD-Tree used in the search with the name
         ``storekdtree`` in ``coords2.cache``. This speeds up subsequent calls
@@ -268,10 +223,18 @@ def search_around_3d(coords1, coords2, distlimit, storekdtree="kdtree_3d"):
 
     Returns
     -------
-    CoordinateSearchResult
-        A `~typing.NamedTuple` with attributes representing the indices
-        of the elements of found pairs in both source sets and angular
-        and physical separations of the pairs.
+    idx1 : int array
+        Indices into ``coords1`` that matches to the corresponding element of
+        ``idx2``. Shape matches ``idx2``.
+    idx2 : int array
+        Indices into ``coords2`` that matches to the corresponding element of
+        ``idx1``. Shape matches ``idx1``.
+    sep2d : `~astropy.coordinates.Angle`
+        The on-sky separation between the coordinates. Shape matches ``idx1``
+        and ``idx2``.
+    dist3d : `~astropy.units.Quantity` ['length']
+        The 3D distance between the coordinates. Shape matches ``idx1`` and
+        ``idx2``. The unit is that of ``coords1``.
 
     Notes
     -----
@@ -289,11 +252,25 @@ def search_around_3d(coords1, coords2, distlimit, storekdtree="kdtree_3d"):
     considered an implementation detail, though, so it could change in a future
     release.
     """
-    if coords1.ndim != 1 or coords2.ndim != 1:
-        msg = "search_around_3d only supports 1-dimensional coordinate arrays."
-        if coords1.isscalar or coords2.isscalar:
-            msg += " With a scalar array, use ``coord1.separation(coord2) < seplimit``."
-        raise ValueError(msg)
+    if not distlimit.isscalar:
+        raise ValueError("distlimit must be a scalar in search_around_3d")
+
+    if coords1.isscalar or coords2.isscalar:
+        raise ValueError(
+            "One of the inputs to search_around_3d is a scalar. search_around_3d is"
+            " intended for use with array coordinates, not scalars.  Instead, use"
+            " ``coord1.separation_3d(coord2) < distlimit`` to find the coordinates near"
+            " a scalar coordinate."
+        )
+
+    if len(coords1) == 0 or len(coords2) == 0:
+        # Empty array input: return empty match
+        return (
+            np.array([], dtype=int),
+            np.array([], dtype=int),
+            Angle([], u.deg),
+            u.Quantity([], coords1.distance.unit),
+        )
 
     kdt2 = _get_cartesian_kdtree(coords2, storekdtree)
     cunit = coords2.cartesian.x.unit
@@ -304,26 +281,27 @@ def search_around_3d(coords1, coords2, distlimit, storekdtree="kdtree_3d"):
     coords1 = coords1.transform_to(coords2)
 
     kdt1 = _get_cartesian_kdtree(coords1, storekdtree, forceunit=cunit)
+
+    # this is the *cartesian* 3D distance that corresponds to the given angle
+    d = distlimit.to_value(cunit)
+
     idxs1 = []
     idxs2 = []
+    for i, matches in enumerate(kdt1.query_ball_tree(kdt2, d)):
+        for match in matches:
+            idxs1.append(i)
+            idxs2.append(match)
+    idxs1 = np.array(idxs1, dtype=int)
+    idxs2 = np.array(idxs2, dtype=int)
 
-    if distlimit.isscalar:
-        for i, matches in enumerate(
-            kdt1.query_ball_tree(kdt2, distlimit.to_value(cunit))
-        ):
-            idxs1.extend(len(matches) * [i])
-            idxs2.extend(matches)
+    if idxs1.size == 0:
+        d2ds = Angle([], u.deg)
+        d3ds = u.Quantity([], coords1.distance.unit)
     else:
-        for i, (point, distance) in enumerate(zip(kdt1.data, distlimit, strict=True)):
-            matches = kdt2.query_ball_point(point, distance.to_value(cunit))
-            idxs1.extend(len(matches) * [i])
-            idxs2.extend(matches)
-    return CoordinateSearchResult(
-        np.array(idxs1, dtype=int),
-        np.array(idxs2, dtype=int),
-        coords1[idxs1].separation(coords2[idxs2]),
-        coords1[idxs1].separation_3d(coords2[idxs2]),
-    )
+        d2ds = coords1[idxs1].separation(coords2[idxs2])
+        d3ds = coords1[idxs1].separation_3d(coords2[idxs2])
+
+    return idxs1, idxs2, d2ds, d3ds
 
 
 def search_around_sky(coords1, coords2, seplimit, storekdtree="kdtree_sky"):
@@ -339,13 +317,12 @@ def search_around_sky(coords1, coords2, seplimit, storekdtree="kdtree_sky"):
     ----------
     coords1 : coordinate-like
         The first set of coordinates, which will be searched for matches from
-        ``coords2`` within ``seplimit``. Must be a one-dimensional coordinate array.
+        ``coords2`` within ``seplimit``. Cannot be a scalar coordinate.
     coords2 : coordinate-like
         The second set of coordinates, which will be searched for matches from
-        ``coords1`` within ``seplimit``. Must be a one-dimensional coordinate array.
+        ``coords1`` within ``seplimit``. Cannot be a scalar coordinate.
     seplimit : `~astropy.units.Quantity` ['angle']
-        The on-sky separation to search within. It should be broadcastable to the same
-        shape as ``coords1``.
+        The on-sky separation to search within.
     storekdtree : bool or str, optional
         If a string, will store the KD-Tree used in the search with the name
         ``storekdtree`` in ``coords2.cache``. This speeds up subsequent calls
@@ -353,12 +330,21 @@ def search_around_sky(coords1, coords2, seplimit, storekdtree="kdtree_sky"):
 
     Returns
     -------
-    CoordinateSearchResult
-        A `~typing.NamedTuple` with attributes representing the indices
-        of the elements of found pairs in both source sets and angular
-        and physical separations of the pairs. If either set of sources
-        lack distances, the physical separation is the 3D distance on
-        the unit sphere, rather than a true distance.
+    idx1 : int array
+        Indices into ``coords1`` that matches to the corresponding element of
+        ``idx2``. Shape matches ``idx2``.
+    idx2 : int array
+        Indices into ``coords2`` that matches to the corresponding element of
+        ``idx1``. Shape matches ``idx1``.
+    sep2d : `~astropy.coordinates.Angle`
+        The on-sky separation between the coordinates. Shape matches ``idx1``
+        and ``idx2``.
+    dist3d : `~astropy.units.Quantity` ['length']
+        The 3D distance between the coordinates. Shape matches ``idx1``
+        and ``idx2``; the unit is that of ``coords1``.
+        If either ``coords1`` or ``coords2`` don't have a distance,
+        this is the 3D distance on the unit sphere, rather than a
+        physical distance.
 
     Notes
     -----
@@ -370,11 +356,29 @@ def search_around_sky(coords1, coords2, seplimit, storekdtree="kdtree_sky"):
     considered an implementation detail, though, so it could change in a future
     release.
     """
-    if coords1.ndim != 1 or coords2.ndim != 1:
-        msg = "search_around_sky only supports 1-dimensional coordinate arrays."
-        if coords1.isscalar or coords2.isscalar:
-            msg += " With a scalar array, use ``coord1.separation(coord2) < seplimit``."
-        raise ValueError(msg)
+    if not seplimit.isscalar:
+        raise ValueError("seplimit must be a scalar in search_around_sky")
+
+    if coords1.isscalar or coords2.isscalar:
+        raise ValueError(
+            "One of the inputs to search_around_sky is a scalar. search_around_sky is"
+            " intended for use with array coordinates, not scalars.  Instead, use"
+            " ``coord1.separation(coord2) < seplimit`` to find the coordinates near a"
+            " scalar coordinate."
+        )
+
+    if len(coords1) == 0 or len(coords2) == 0:
+        # Empty array input: return empty match
+        if coords2.distance.unit == u.dimensionless_unscaled:
+            distunit = u.dimensionless_unscaled
+        else:
+            distunit = coords1.distance.unit
+        return (
+            np.array([], dtype=int),
+            np.array([], dtype=int),
+            Angle([], u.deg),
+            u.Quantity([], distunit),
+        )
 
     # we convert coord1 to match coord2's frame.  We do it this way
     # so that if the conversion does happen, the KD tree of coord2 at least gets
@@ -383,46 +387,52 @@ def search_around_sky(coords1, coords2, seplimit, storekdtree="kdtree_sky"):
 
     # strip out distance info
     urepr1 = coords1.data.represent_as(UnitSphericalRepresentation)
+    ucoords1 = coords1.realize_frame(urepr1)
 
-    kdt1 = _get_cartesian_kdtree(coords1.realize_frame(urepr1), storekdtree)
+    kdt1 = _get_cartesian_kdtree(ucoords1, storekdtree)
+
     if storekdtree and coords2.cache.get(storekdtree):
         # just use the stored KD-Tree
         kdt2 = coords2.cache[storekdtree]
     else:
         # strip out distance info
         urepr2 = coords2.data.represent_as(UnitSphericalRepresentation)
+        ucoords2 = coords2.realize_frame(urepr2)
 
-        kdt2 = _get_cartesian_kdtree(coords2.realize_frame(urepr2), storekdtree)
+        kdt2 = _get_cartesian_kdtree(ucoords2, storekdtree)
         if storekdtree:
+            # save the KD-Tree in coords2, *not* ucoords2
             coords2.cache["kdtree" if storekdtree is True else storekdtree] = kdt2
+
+    # this is the *cartesian* 3D distance that corresponds to the given angle
+    r = (2 * np.sin(Angle(seplimit) / 2.0)).value
 
     idxs1 = []
     idxs2 = []
+    for i, matches in enumerate(kdt1.query_ball_tree(kdt2, r)):
+        for match in matches:
+            idxs1.append(i)
+            idxs2.append(match)
+    idxs1 = np.array(idxs1, dtype=int)
+    idxs2 = np.array(idxs2, dtype=int)
 
-    if seplimit.isscalar:
-        # this is the *cartesian* 3D distance that corresponds to the given angle
-        r = (2 * np.sin(Angle(0.5 * seplimit))).value
-
-        for i, matches in enumerate(kdt1.query_ball_tree(kdt2, r)):
-            idxs1.extend(len(matches) * [i])
-            idxs2.extend(matches)
+    if idxs1.size == 0:
+        if coords2.distance.unit == u.dimensionless_unscaled:
+            distunit = u.dimensionless_unscaled
+        else:
+            distunit = coords1.distance.unit
+        d2ds = Angle([], u.deg)
+        d3ds = u.Quantity([], distunit)
     else:
-        for i, (point, sep) in enumerate(zip(kdt1.data, seplimit, strict=True)):
-            radius = (2 * np.sin(Angle(0.5 * sep))).value
-            matches = kdt2.query_ball_point(point, radius)
-            idxs1.extend(len(matches) * [i])
-            idxs2.extend(matches)
+        d2ds = coords1[idxs1].separation(coords2[idxs2])
+        try:
+            d3ds = coords1[idxs1].separation_3d(coords2[idxs2])
+        except ValueError:
+            # they don't have distances, so we just fall back on the cartesian
+            # distance, computed from d2ds
+            d3ds = 2 * np.sin(d2ds / 2.0)
 
-    d2ds = coords1[idxs1].separation(coords2[idxs2])
-    try:
-        d3ds = coords1[idxs1].separation_3d(coords2[idxs2])
-    except ValueError:
-        # they don't have distances, so we just fall back on the cartesian
-        # distance, computed from d2ds
-        d3ds = 2 * np.sin(0.5 * d2ds)
-    return CoordinateSearchResult(
-        np.array(idxs1, dtype=int), np.array(idxs2, dtype=int), d2ds, d3ds
-    )
+    return idxs1, idxs2, d2ds, d3ds
 
 
 def _get_cartesian_kdtree(coord, attrname_or_kdt="kdtree", forceunit=None):
@@ -445,11 +455,23 @@ def _get_cartesian_kdtree(coord, attrname_or_kdt="kdtree", forceunit=None):
 
     Returns
     -------
-    kdt : `~scipy.spatial.KDTree`
+    kdt : `~scipy.spatial.cKDTree` or `~scipy.spatial.KDTree`
         The KD-Tree representing the 3D cartesian representation of the input
         coordinates.
     """
-    from scipy.spatial import KDTree
+    from warnings import warn
+
+    # without scipy this will immediately fail
+    from scipy import spatial
+
+    try:
+        KDTree = spatial.cKDTree
+    except Exception:
+        warn(
+            "C-based KD tree not found, falling back on (much slower) "
+            "python implementation"
+        )
+        KDTree = spatial.KDTree
 
     if attrname_or_kdt is True:  # backwards compatibility for pre v0.4
         attrname_or_kdt = "kdtree"
@@ -481,9 +503,15 @@ def _get_cartesian_kdtree(coord, attrname_or_kdt="kdtree", forceunit=None):
         # There should be no NaNs in the kdtree data.
         if np.isnan(flatxyz.value).any():
             raise ValueError("Catalog coordinates cannot contain NaN entries.")
-        # Not obvious if compact_nodes=False, balanced_tree=False is still needed but
-        # we stay backwards-compatible with previous versions of `astropy` for now.
-        kdt = KDTree(flatxyz.value.T, compact_nodes=False, balanced_tree=False)
+        try:
+            # Set compact_nodes=False, balanced_tree=False to use
+            # "sliding midpoint" rule, which is much faster than standard for
+            # many common use cases
+            kdt = KDTree(flatxyz.value.T, compact_nodes=False, balanced_tree=False)
+        except TypeError:
+            # Python implementation does not take compact_nodes and balanced_tree
+            # as arguments.  However, it uses sliding midpoint rule by default
+            kdt = KDTree(flatxyz.value.T)
 
     if attrname_or_kdt:
         # cache the kdtree in `coord`

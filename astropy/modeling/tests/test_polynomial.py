@@ -1,11 +1,11 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 """Tests for polynomial models."""
-
 # pylint: disable=invalid-name
 import os
 import unittest.mock as mk
 import warnings
+from itertools import product
 
 import numpy as np
 import pytest
@@ -113,14 +113,17 @@ class TestFitting:
         self.y2, self.x2 = np.mgrid[:100, :83]
         rsn = np.random.default_rng(0)
         self.n1 = rsn.standard_normal(self.x1.size) * 0.1
-        self.n2 = rsn.standard_normal(self.x2.size).reshape(self.x2.shape)
+        self.n2 = rsn.standard_normal(self.x2.size)
+        self.n2.shape = self.x2.shape
         self.linear_fitter = fitting.LinearLSQFitter()
 
     # TODO: Most of these test cases have some pretty repetitive setup that we
     # could probably factor out
 
-    @pytest.mark.parametrize("model_class", sorted(linear1d, key=str))
-    @pytest.mark.parametrize("constraints", [False, True])
+    @pytest.mark.parametrize(
+        ("model_class", "constraints"),
+        list(product(sorted(linear1d, key=str), (False, True))),
+    )
     def test_linear_fitter_1D(self, model_class, constraints):
         """Test fitting with LinearLSQFitter"""
 
@@ -148,14 +151,16 @@ class TestFitting:
             # just that the constraint was maintained
             fixed = model_args["constraints"].get("fixed", None)
             if fixed:
-                for param in fixed:
+                for param, value in fixed.items():
                     expected = model_args["parameters"][param]
                     assert getattr(model_lin, param).value == expected
         else:
             assert_allclose(model_lin.parameters, model.parameters, atol=0.2)
 
-    @pytest.mark.parametrize("model_class", sorted(linear1d, key=str))
-    @pytest.mark.parametrize("constraints", [False, True])
+    @pytest.mark.parametrize(
+        ("model_class", "constraints"),
+        list(product(sorted(linear1d, key=str), (False, True))),
+    )
     @pytest.mark.parametrize("fitter", fitters)
     def test_non_linear_fitter_1D(self, model_class, constraints, fitter):
         """Test fitting with non-linear LevMarLSQFitter"""
@@ -178,14 +183,16 @@ class TestFitting:
         if constraints:
             fixed = model_args["constraints"].get("fixed", None)
             if fixed:
-                for param in fixed:
+                for param, value in fixed.items():
                     expected = model_args["parameters"][param]
                     assert getattr(model_nlin, param).value == expected
         else:
             assert_allclose(model_nlin.parameters, model.parameters, atol=0.2)
 
-    @pytest.mark.parametrize("model_class", sorted(linear2d, key=str))
-    @pytest.mark.parametrize("constraints", [False, True])
+    @pytest.mark.parametrize(
+        ("model_class", "constraints"),
+        list(product(sorted(linear2d, key=str), (False, True))),
+    )
     def test_linear_fitter_2D(self, model_class, constraints):
         """Test fitting with LinearLSQFitter"""
 
@@ -211,14 +218,16 @@ class TestFitting:
         if constraints:
             fixed = model_args["constraints"].get("fixed", None)
             if fixed:
-                for param in fixed:
+                for param, value in fixed.items():
                     expected = model_args["parameters"][param]
                     assert getattr(model_lin, param).value == expected
         else:
             assert_allclose(model_lin.parameters, model.parameters, atol=0.2)
 
-    @pytest.mark.parametrize("model_class", sorted(linear2d, key=str))
-    @pytest.mark.parametrize("constraints", [False, True])
+    @pytest.mark.parametrize(
+        ("model_class", "constraints"),
+        list(product(sorted(linear2d, key=str), (False, True))),
+    )
     @pytest.mark.parametrize("fitter", fitters)
     def test_non_linear_fitter_2D(self, model_class, constraints, fitter):
         """Test fitting with non-linear LevMarLSQFitter"""
@@ -241,14 +250,16 @@ class TestFitting:
         if constraints:
             fixed = model_args["constraints"].get("fixed", None)
             if fixed:
-                for param in fixed:
+                for param, value in fixed.items():
                     expected = model_args["parameters"][param]
                     assert getattr(model_nlin, param).value == expected
         else:
             assert_allclose(model_nlin.parameters, model.parameters, atol=0.2)
 
 
-@pytest.mark.parametrize("model_class", list(list(linear1d) + list(linear2d)))
+@pytest.mark.parametrize(
+    "model_class", [cls for cls in list(linear1d) + list(linear2d)]
+)
 def test_polynomial_init_with_constraints(model_class):
     """
     Test that polynomial models can be instantiated with constraints, but no

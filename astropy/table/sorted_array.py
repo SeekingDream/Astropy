@@ -1,12 +1,5 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from collections.abc import Hashable, Mapping, Sequence
-from numbers import Integral
-from typing import TYPE_CHECKING
-
 import numpy as np
-
-if TYPE_CHECKING:
-    from .table import Column, Table
 
 
 def _searchsorted(array, val, side="left"):
@@ -48,17 +41,17 @@ class SortedArray:
         Defaults to False.
     """
 
-    def __init__(self, data: "Table", row_index: "Column", unique: bool = False):
+    def __init__(self, data, row_index, unique=False):
         self.data = data
         self.row_index = row_index
         self.num_cols = len(getattr(data, "colnames", []))
         self.unique = unique
 
     @property
-    def cols(self) -> list["Column"]:
+    def cols(self):
         return list(self.data.columns.values())
 
-    def add(self, key: tuple, row: int) -> None:
+    def add(self, key, row):
         """
         Add a new entry to the sorted array.
 
@@ -134,7 +127,7 @@ class SortedArray:
 
         return begin
 
-    def find(self, key: tuple) -> Sequence[Integral]:
+    def find(self, key):
         """
         Find all rows matching the given key.
 
@@ -169,12 +162,7 @@ class SortedArray:
 
         return self.row_index[begin:end]
 
-    def range(
-        self,
-        lower: tuple[Hashable, ...],
-        upper: tuple[Hashable, ...],
-        bounds: tuple[bool, bool],
-    ) -> list[int]:
+    def range(self, lower, upper, bounds):
         """
         Find values in the given range.
 
@@ -209,7 +197,7 @@ class SortedArray:
                 upper_pos -= 1  # data[upper_pos] <= upper
         return self.row_index[lower_pos : upper_pos + 1]
 
-    def remove(self, key: tuple, data: int) -> bool:
+    def remove(self, key, data):
         """
         Remove the given entry from the sorted array.
 
@@ -235,7 +223,7 @@ class SortedArray:
         self.row_index = self.row_index[keep_mask]
         return True
 
-    def shift_left(self, row: int) -> None:
+    def shift_left(self, row):
         """
         Decrement all row numbers greater than the input row.
 
@@ -246,7 +234,7 @@ class SortedArray:
         """
         self.row_index[self.row_index > row] -= 1
 
-    def shift_right(self, row: int) -> None:
+    def shift_right(self, row):
         """
         Increment all row numbers greater than or equal to the input row.
 
@@ -257,7 +245,7 @@ class SortedArray:
         """
         self.row_index[self.row_index >= row] += 1
 
-    def replace_rows(self, row_map: "Mapping[int, int]") -> None:
+    def replace_rows(self, row_map):
         """
         Replace all rows with the values they map to in the
         given dictionary. Any rows not present as keys in
@@ -281,10 +269,10 @@ class SortedArray:
         self.data = self.data[keep_rows]
         self.row_index = np.array([row_map[x] for x in self.row_index[keep_rows]])
 
-    def items(self) -> list[tuple[Hashable, list[Integral]]]:
+    def items(self):
         """
         Retrieve all array items as a list of pairs of the form
-        [(key, [row 1, row 2, ...]), ...].
+        [(key, [row 1, row 2, ...]), ...]
         """
         array = []
         last_key = None
@@ -297,13 +285,13 @@ class SortedArray:
                 array.append((key, [row]))
         return array
 
-    def sort(self) -> None:
+    def sort(self):
         """
         Make row order align with key order.
         """
         self.row_index = np.arange(len(self.row_index))
 
-    def sorted_data(self) -> None:
+    def sorted_data(self):
         """
         Return rows in sorted order.
         """

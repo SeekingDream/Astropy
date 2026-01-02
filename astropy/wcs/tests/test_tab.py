@@ -8,9 +8,11 @@ from packaging.version import Version
 from astropy import wcs
 from astropy.io import fits
 from astropy.utils.data import get_pkg_data_filename
-from astropy.wcs.wcs import WCSLIB_VERSION
+from astropy.wcs import _wcs
 
 from .helper import SimModelTAB
+
+_WCSLIB_VER = Version(_wcs.__version__)
 
 
 def test_2d_spatial_tab_roundtrip(tab_wcs_2di):
@@ -44,7 +46,7 @@ def test_2d_spatial_tab_vs_model():
 
 
 @pytest.mark.skipif(
-    Version(WCSLIB_VERSION) < Version("7.6"),
+    _WCSLIB_VER < Version("7.6"),
     reason="Only in WCSLIB 7.6 a 1D -TAB axis roundtrips unless first axis",
 )
 def test_mixed_celest_and_1d_tab_roundtrip():
@@ -59,7 +61,7 @@ def test_mixed_celest_and_1d_tab_roundtrip():
 
 
 @pytest.mark.skipif(
-    Version(WCSLIB_VERSION) < Version("7.8"),
+    _WCSLIB_VER < Version("7.8"),
     reason="Requires WCSLIB >= 7.8 for swapping -TAB axes to work.",
 )
 def test_wcstab_swapaxes():
@@ -75,18 +77,18 @@ def test_wcstab_swapaxes():
 
 
 @pytest.mark.skipif(
-    Version(WCSLIB_VERSION) < Version("7.8"),
+    _WCSLIB_VER < Version("7.8"),
     reason="Requires WCSLIB >= 7.8 for swapping -TAB axes to work.",
 )
 @pytest.mark.xfail(
-    Version("7.8") <= Version(WCSLIB_VERSION) < Version("7.10"),
+    Version("7.8") <= _WCSLIB_VER < Version("7.10"),
     reason="Requires WCSLIB >= 7.10 for swapped -TAB axes to produce same results.",
 )
 def test_wcstab_swapaxes_same_val_roundtrip():
     filename = get_pkg_data_filename("data/tab-time-last-axis.fits")
 
     axes_order = [3, 2, 1]
-    axes_order0 = [i - 1 for i in axes_order]
+    axes_order0 = list(i - 1 for i in axes_order)
 
     with fits.open(filename) as hdul:
         w = wcs.WCS(hdul[0].header, hdul)

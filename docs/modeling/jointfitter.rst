@@ -222,10 +222,11 @@ between the two AreaGaussian1D models and the two spectral segments.
    g12 = fit_joint(x1, y1, x2, y2)
 
    # Plot the data with the best-fit models
-   fig, ax = plt.subplots(figsize=(8, 5))
-   ax.plot(x1, y1, "bo", alpha=0.25)
-   ax.plot(x2, y2, "go", alpha=0.25)
-   ax.plot(x1, gjf1(x1), "b--", label="AreaGaussian1")
-   ax.plot(x2, gjf2(x2), "g--", label="AreaGaussian2")
-   ax.set(xlabel="Wavelength", ylabel="Flux")
-   ax.legend(loc=2)
+   plt.figure(figsize=(8, 5))
+   plt.plot(x1, y1, "bo", alpha=0.25)
+   plt.plot(x2, y2, "go", alpha=0.25)
+   plt.plot(x1, gjf1(x1), "b--", label="AreaGaussian1")
+   plt.plot(x2, gjf2(x2), "g--", label="AreaGaussian2")
+   plt.xlabel("Wavelength")
+   plt.ylabel("Flux")
+   plt.legend(loc=2)

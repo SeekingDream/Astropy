@@ -20,7 +20,7 @@ For the example in the following page we start from the example introduced in
 
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(subplot_kw=dict(projection=wcs))
+    ax = plt.subplot(projection=wcs)
     ax.imshow(hdu.data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
 
 Plotting images as bitmaps or contours should be done via the usual matplotlib

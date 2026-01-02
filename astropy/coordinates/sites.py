@@ -10,21 +10,16 @@ Request to the [astropy-data GitHub repository](https://github.com/astropy/astro
 updating the ``location.json`` file.
 """
 
+
 import json
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from difflib import get_close_matches
-from typing import Any, Final, Self
 
 from astropy import units as u
 from astropy.utils.data import get_file_contents, get_pkg_data_contents
 
 from .earth import EarthLocation
 from .errors import UnknownSiteException
-
-# An EarthLocation instance for the tests that need one.
-_GREENWICH: Final = EarthLocation(
-    lon=-0.001475 * u.deg, lat=51.477811 * u.deg, height=46 * u.m
-)
 
 
 class SiteRegistry(Mapping):
@@ -37,13 +32,13 @@ class SiteRegistry(Mapping):
     be interpreted as the all lower-case version.
     """
 
-    def __init__(self) -> None:
+    def __init__(self):
         # the keys to this are always lower-case
-        self._lowercase_names_to_locations: dict[str, EarthLocation] = {}
+        self._lowercase_names_to_locations = {}
         # these can be whatever case is appropriate
-        self._names: list[str] = []
+        self._names = []
 
-    def __getitem__(self, site_name: str) -> EarthLocation:
+    def __getitem__(self, site_name):
         """
         Returns an EarthLocation for a known site in this registry.
 
@@ -57,32 +52,34 @@ class SiteRegistry(Mapping):
         site : `~astropy.coordinates.EarthLocation`
             The location of the observatory.
         """
-        try:
-            return self._lowercase_names_to_locations[site_name.lower()]
-        except KeyError:
-            raise UnknownSiteException(
-                site=site_name,
-                attribute="the 'names' attribute",
-                close_names=sorted(
-                    get_close_matches(site_name, self._lowercase_names_to_locations),
-                    key=len,
-                ),
-            ) from None
-        except AttributeError:
-            raise TypeError(f"site name {site_name!r} is not a 'str'") from None
+        if site_name.lower() not in self._lowercase_names_to_locations:
+            # If site name not found, find close matches and suggest them in error
+            close_names = get_close_matches(
+                site_name, self._lowercase_names_to_locations
+            )
+            close_names = sorted(close_names, key=len)
 
-    def __len__(self) -> int:
+            raise UnknownSiteException(
+                site_name, "the 'names' attribute", close_names=close_names
+            )
+
+        return self._lowercase_names_to_locations[site_name.lower()]
+
+    def __len__(self):
         return len(self._lowercase_names_to_locations)
 
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self):
         return iter(self._lowercase_names_to_locations)
 
+    def __contains__(self, site_name):
+        return site_name.lower() in self._lowercase_names_to_locations
+
     @property
-    def names(self) -> list[str]:
+    def names(self):
         """
         The names in this registry.  Note that these are *not* exactly the same
         as the keys: keys are always lower-case, while `names` is what you
-        should use for the actual readable names (which may be case-sensitive).
+        should use for the actual readable names (which may be case-sensitive)
 
         Returns
         -------
@@ -91,7 +88,7 @@ class SiteRegistry(Mapping):
         """
         return sorted(self._names)
 
-    def add_site(self, names: list[str], locationobj: EarthLocation) -> None:
+    def add_site(self, names, locationobj):
         """
         Adds a location to the registry.
 
@@ -107,7 +104,7 @@ class SiteRegistry(Mapping):
             self._names.append(name)
 
     @classmethod
-    def from_json(cls, jsondb: Mapping[str, dict[str, Any]]) -> Self:
+    def from_json(cls, jsondb):
         reg = cls()
         for site in jsondb:
             site_info = jsondb[site].copy()
@@ -124,13 +121,25 @@ class SiteRegistry(Mapping):
             location.info.meta = site_info  # whatever is left
 
             reg.add_site([site] + aliases, location)
+
+        reg._loaded_jsondb = jsondb
         return reg
 
 
-def get_downloaded_sites(jsonurl: str | None = None) -> SiteRegistry:
+def get_builtin_sites():
     """
-    Load observatory database from data.astropy.org and parse into a SiteRegistry.
+    Load observatory database from data/observatories.json and parse them into
+    a SiteRegistry.
     """
+    jsondb = json.loads(get_pkg_data_contents("data/sites.json"))
+    return SiteRegistry.from_json(jsondb)
+
+
+def get_downloaded_sites(jsonurl=None):
+    """
+    Load observatory database from data.astropy.org and parse into a SiteRegistry
+    """
+
     # we explicitly set the encoding because the default is to leave it set by
     # the users' locale, which may fail if it's not matched to the sites.json
     if jsonurl is None:

@@ -45,7 +45,7 @@ read in the time series using:
    :nofigs:
 
    from astropy.timeseries import TimeSeries
-   kepler = TimeSeries.read(example_data, format='kepler.fits', unit_parse_strict='silent')
+   kepler = TimeSeries.read(example_data, format='kepler.fits')
 
 Now we can check that the time series has been read in correctly:
 
@@ -55,9 +55,9 @@ Now we can check that the time series has been read in correctly:
 
    import matplotlib.pyplot as plt
 
-   fig, ax = plt.subplots()
-   ax.plot(kepler.time.jd, kepler['sap_flux'], 'k.', markersize=1)
-   ax.set(xlabel='Julian Date', ylabel='SAP Flux (e-/s)')
+   plt.plot(kepler.time.jd, kepler['sap_flux'], 'k.', markersize=1)
+   plt.xlabel('Julian Date')
+   plt.ylabel('SAP Flux (e-/s)')
 
 .. EXAMPLE END
 

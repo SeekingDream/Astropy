@@ -31,40 +31,6 @@ The built-in representation classes are:
   cylindrical polar coordinates, represented by a cylindrical radius
   (``rho``), azimuthal angle (``phi``), and height (``z``).
 
-
-Astropy also offers a `~astropy.coordinates.BaseGeodeticRepresentation` and
-a `~astropy.coordinates.BaseBodycentricRepresentation` useful to
-create specific representations on spheroidal bodies.
-
-`~astropy.coordinates.BaseGeodeticRepresentation` is the coordinate representation on
-a surface of a spheroid (an ellipsoid with equal
-equatorial radii), represented by a longitude (``lon``) a geodetic latitude (``lat``)
-and a height (``height``) above the surface.
-The geodetic latitude is defined by the angle
-between the vertical to the surface at a specific point of the spheroid and its
-projection onto the equatorial plane.
-The latitude is a value ranging from -90 to 90 degrees, the longitude from 0 to 360
-degrees, the height is the elevation above the surface of the spheroid (measured
-perpendicular to the surface).
-
-`~astropy.coordinates.BaseBodycentricRepresentation` is the coordinate representation
-recommended by the Cartographic Coordinates & Rotational Elements Working Group
-(see for example its `2019 report <https://rdcu.be/b32WL>`_): the bodycentric latitude
-and longitude are spherical latitude and longitude relative to the barycenter of the
-body, the height is the distance from the spheroid surface (measured radially).
-The latitude is a value ranging from -90 to 90 degrees, the longitude from 0 to 360
-degrees.
-
-`~astropy.coordinates.BaseGeodeticRepresentation` is used internally for the standard
-Earth ellipsoids used in
-`~astropy.coordinates.EarthLocation`
-(`~astropy.coordinates.WGS84GeodeticRepresentation`,
-`~astropy.coordinates.WGS72GeodeticRepresentation`, and
-`~astropy.coordinates.GRS80GeodeticRepresentation`).
-`~astropy.coordinates.BaseGeodeticRepresentation` and
-`~astropy.coordinates.BaseBodycentricRepresentation`
-can be customized as described in :ref:`astropy-coordinates-create-geodetic`.
-
 .. Note::
    For information about using and changing the representation of
    `~astropy.coordinates.SkyCoord` objects, see the
@@ -273,7 +239,7 @@ consider the following examples::
       [[(0.,  0.,  0.), (0.,   0., -2.), (0.,   3.,  0.)],
        [(0.,  0., -4.), (0.,  12.,  0.), (0., -12.,  4.)]]>
 
-  >>> from astropy.coordinates import rotation_matrix
+  >>> from astropy.coordinates.matrix_utilities import rotation_matrix
   >>> rotation = rotation_matrix(90 * u.deg, axis='z')
   >>> rotation  # doctest: +FLOAT_CMP
   array([[ 6.12323400e-17,  1.00000000e+00,  0.00000000e+00],
@@ -690,7 +656,7 @@ In pseudo-code, this means that a class will look like::
             "comp3": ComponentClass3,
         }
 
-        # __init__ is optional
+	# __init__ is optional
         def __init__(self, comp1, comp2, comp3, copy=True):
             super().__init__(comp1, comp2, comp3, copy=copy)
             ...
@@ -704,46 +670,18 @@ In pseudo-code, this means that a class will look like::
             ...
             return CartesianRepresentation(...)
 
-        # if differential motion is needed
-        def unit_vectors(self):
-            ...
-            return {'comp1': CartesianRepresentation(...),
-                    'comp2': CartesianRepresentation(...),
-                    'comp3': CartesianRepresentation(...)}
+	# if differential motion is needed
+	def unit_vectors(self):
+	    ...
+	    return {'comp1': CartesianRepresentation(...),
+	            'comp2': CartesianRepresentation(...),
+		    'comp3': CartesianRepresentation(...)}
 
         def scale_factors(self):
-            ...
-            return {'comp1': ...,
-                    'comp2': ...,
-                    'comp3': ...}
+	    ...
+	    return {'comp1': ...,
+	            'comp2': ...,
+		    'comp3': ...}
 
     class MyDifferential(BaseDifferential):
         base_representation = MyRepresentation
-
-.. _astropy-coordinates-create-geodetic:
-
-Creating Your Own Geodetic and Bodycentric Representations
-----------------------------------------------------------
-
-If you would like to use geodetic coordinates on planetary bodies other than the Earth,
-you can define a new class that inherits from
-`~astropy.coordinates.BaseGeodeticRepresentation` or
-`~astropy.coordinates.BaseBodycentricRepresentation`.
-The equatorial radius and flattening must be both assigned via the attributes
-`_equatorial_radius` and `_flattening`.
-
-For example the spheroid describing Mars as in the
-`1979 IAU standard <https://doi.org/10.1007/BF01229508>`_ could be defined like::
-
-    class IAUMARS1979GeodeticRepresentation(BaseGeodeticRepresentation):
-
-        _equatorial_radius = 3393400.0 * u.m
-        _flattening = 0.518650 * u.percent
-
-The bodycentric coordinate system representing Mars as in the
-`2000 IAU standard <https://doi.org/10.1023/A:1013939327465>`_ could be defined as::
-
-    class IAUMARS2000BodycentricRepresentation(BaseBodycentricRepresentation):
-
-        _equatorial_radius = 3396190.0 * u.m
-        _flattening = 0.5886008 * u.percent

@@ -55,19 +55,18 @@ To use Ripley's K Function Estimators from ``astropy``'s stats sub-package:
     Kest = RipleysKEstimator(area=25, x_max=10, y_max=10, x_min=5, y_min=5)
 
     r = np.linspace(0, 2.5, 100)
-    fig, ax = plt.subplots()
-    ax.plot(r, Kest.poisson(r), color='green', ls=':', label=r'$K_{pois}$')
-    ax.plot(r, Kest(data=z, radii=r, mode='none'), color='red', ls='--',
+    plt.plot(r, Kest.poisson(r), color='green', ls=':', label=r'$K_{pois}$')
+    plt.plot(r, Kest(data=z, radii=r, mode='none'), color='red', ls='--',
              label=r'$K_{un}$')
-    ax.plot(r, Kest(data=z, radii=r, mode='translation'), color='black',
+    plt.plot(r, Kest(data=z, radii=r, mode='translation'), color='black',
              label=r'$K_{trans}$')
-    ax.plot(r, Kest(data=z, radii=r, mode='ohser'), color='blue', ls='-.',
+    plt.plot(r, Kest(data=z, radii=r, mode='ohser'), color='blue', ls='-.',
              label=r'$K_{ohser}$')
-    ax.plot(r, Kest(data=z, radii=r, mode='var-width'), color='green',
+    plt.plot(r, Kest(data=z, radii=r, mode='var-width'), color='green',
              label=r'$K_{var-width}$')
-    ax.plot(r, Kest(data=z, radii=r, mode='ripley'), color='yellow',
+    plt.plot(r, Kest(data=z, radii=r, mode='ripley'), color='yellow',
              label=r'$K_{ripley}$')
-    ax.legend()
+    plt.legend()
 
 ..
   EXAMPLE END

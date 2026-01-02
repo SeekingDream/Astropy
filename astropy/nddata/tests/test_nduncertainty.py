@@ -1,8 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
 import pickle
-from collections import defaultdict
-from gc import get_objects
 
 import numpy as np
 import pytest
@@ -20,8 +18,6 @@ from astropy.nddata.nduncertainty import (
     StdDevUncertainty,
     UnknownUncertainty,
     VarianceUncertainty,
-    _move_preserved_axes_first,
-    _unravel_preserved_axes,
 )
 
 # Regarding setter tests:
@@ -213,6 +209,9 @@ def test_uncertainty_correlated():
 def test_for_leak_with_uncertainty():
     # Regression test for memory leak because of cyclic references between
     # NDData and uncertainty
+    from collections import defaultdict
+    from gc import get_objects
+
     def test_leak(func, specific_objects=None):
         """Function based on gc.get_objects to determine if any object or
         a specific object leaks.
@@ -400,29 +399,3 @@ def test_self_conversion_via_variance_not_supported(UncertClass):
     start_uncert = UncertClass(uncert)
     with pytest.raises(TypeError):
         final_uncert = start_uncert.represent_as(UncertClass)
-
-
-def test_reshape_ndarray_methods():
-    shape = (6, 5, 4, 3, 2)
-    preserve_axes = (1, 2)
-    arr = np.arange(np.prod(shape)).reshape(shape)
-    reshaped_arr = _move_preserved_axes_first(arr, preserve_axes)
-    new_shape = reshaped_arr.shape
-
-    # first entry will be product of two preserved axes:
-    assert new_shape[0] == np.prod(np.array(shape)[np.array(preserve_axes)])
-
-    # remaining entries unchanged:
-    shape_unchanged_axes = np.array(shape)[
-        np.array([i for i in range(len(shape)) if i not in preserve_axes])
-    ]
-    assert np.all(np.equal(new_shape[1:], shape_unchanged_axes))
-
-    # now confirm that after collapsing along first axis, what's left
-    # can be unraveled to the shape of the preserved axes:
-    summed = np.sum(reshaped_arr, axis=tuple(range(1, len(shape) - 1)))
-    assert summed.shape[0] == new_shape[0]
-
-    unravelled = _unravel_preserved_axes(arr, summed, preserve_axes)
-    shape_preserved = np.array(shape)[np.array(preserve_axes)]
-    assert np.all(np.equal(unravelled.shape, shape_preserved))

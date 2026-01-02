@@ -1,9 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+import abc
 import contextlib
 import re
-import sys
 import warnings
+from collections import OrderedDict
 from operator import itemgetter
 
 import numpy as np
@@ -14,11 +15,13 @@ __all__ = ["IORegistryError"]
 class IORegistryError(Exception):
     """Custom error for registry clashes."""
 
+    pass
+
 
 # -----------------------------------------------------------------------------
 
 
-class _UnifiedIORegistryBase:
+class _UnifiedIORegistryBase(metaclass=abc.ABCMeta):
     """Base class for registries in Astropy's Unified IO.
 
     This base class provides identification functions and miscellaneous
@@ -37,14 +40,11 @@ class _UnifiedIORegistryBase:
 
     def __init__(self):
         # registry of identifier functions
-        self._identifiers = {}
+        self._identifiers = OrderedDict()
 
         # what this class can do: e.g. 'read' &/or 'write'
-        self._registries = {}
-        self._registries["identify"] = {
-            "attr": "_identifiers",
-            "column": "Auto-identify",
-        }
+        self._registries = dict()
+        self._registries["identify"] = dict(attr="_identifiers", column="Auto-identify")
         self._registries_order = ("identify",)  # match keys in `_registries`
 
         # If multiple formats are added to one class the update of the docs is quite
@@ -188,17 +188,10 @@ class _UnifiedIORegistryBase:
         because the documentation of the corresponding ``read`` and ``write``
         methods are build every time.
 
-        This context manager has no effect when running Python in optimized mode
-        (-OO CLI flag).
-
         Examples
         --------
         see for example the source code of ``astropy.table.__init__``.
         """
-        if sys.flags.optimize >= 2:
-            yield
-            return
-
         self._delayed_docs_classes.add(cls)
 
         yield
@@ -259,7 +252,7 @@ class _UnifiedIORegistryBase:
             register_identifier('ipac', Table, my_identifier)
             unregister_identifier('ipac', Table)
         """
-        if not (data_format, data_class) in self._identifiers or force:  # noqa: E713
+        if not (data_format, data_class) in self._identifiers or force:
             self._identifiers[(data_format, data_class)] = identifier
         else:
             raise IORegistryError(
@@ -269,7 +262,7 @@ class _UnifiedIORegistryBase:
 
     def unregister_identifier(self, data_format, data_class):
         """
-        Unregister an identifier function.
+        Unregister an identifier function
 
         Parameters
         ----------
@@ -331,14 +324,14 @@ class _UnifiedIORegistryBase:
         """``get_formats()``, without column "Data class", as a str."""
         format_table = self.get_formats(data_class, filter_on)
         format_table.remove_column("Data class")
-
-        return "\n".join(format_table.pformat(max_lines=-1))
+        format_table_str = "\n".join(format_table.pformat(max_lines=-1))
+        return format_table_str
 
     def _is_best_match(self, class1, class2, format_classes):
-        """Determine if class2 is the "best" match for class1 in the list of classes.
-
-        It is assumed that (class2 in classes) is True.
-        class2 is the best match if:
+        """
+        Determine if class2 is the "best" match for class1 in the list
+        of classes.  It is assumed that (class2 in classes) is True.
+        class2 is the the best match if:
 
         - ``class1`` is a subclass of ``class2`` AND
         - ``class2`` is the nearest ancestor of ``class1`` that is in classes

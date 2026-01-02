@@ -9,12 +9,13 @@ from matplotlib.artist import Artist
 from matplotlib.axes import Axes, subplot_class_factory
 from matplotlib.transforms import Affine2D, Bbox, Transform
 
+import astropy.units as u
 from astropy.coordinates import BaseCoordinateFrame, SkyCoord
+from astropy.utils import minversion
 from astropy.utils.compat.optional_deps import HAS_PIL
 from astropy.wcs import WCS
 from astropy.wcs.wcsapi import BaseHighLevelWCS, BaseLowLevelWCS
 
-from ._auto import auto_assign_coord_positions
 from .coordinates_map import CoordinatesMap
 from .frame import RectangularFrame, RectangularFrame1D
 from .transforms import CoordinateTransform
@@ -24,9 +25,6 @@ from .wcsapi import IDENTITY, transform_coord_meta_from_wcs
 __all__ = ["WCSAxes", "WCSAxesSubplot"]
 
 VISUAL_PROPERTIES = ["facecolor", "edgecolor", "linewidth", "alpha", "linestyle"]
-
-if HAS_PIL:
-    from PIL.Image import Image, Transpose
 
 
 class _WCSAxesArtist(Artist):
@@ -41,10 +39,9 @@ class _WCSAxesArtist(Artist):
     ersatz ticks, labels, and gridlines by explicitly calling the functions
     ``CoordinateHelper._draw_ticks``, ``CoordinateHelper._draw_grid``, etc.
     This hack would not be necessary if ``WCSAxes`` drew ticks, tick labels,
-    and gridlines in the standary way.
-    """
+    and gridlines in the standary way."""
 
-    def draw(self, renderer):
+    def draw(self, renderer, *args, **kwargs):
         self.axes.draw_wcsaxes(renderer)
 
 
@@ -103,11 +100,6 @@ class WCSAxes(Axes):
         The class for the frame, which should be a subclass of
         :class:`~astropy.visualization.wcsaxes.frame.BaseFrame`. The default is to use a
         :class:`~astropy.visualization.wcsaxes.frame.RectangularFrame`
-
-    Attributes
-    ----------
-    coords : :class:`~astropy.visualization.wcsaxes.CoordinatesMap`
-        Container for coordinate information.
     """
 
     def __init__(
@@ -136,7 +128,7 @@ class WCSAxes(Axes):
         else:
             self.frame_class = RectangularFrame
 
-        if transData is not None:
+        if not (transData is None):
             # User wants to override the transform for the final
             # data->pixel mapping
             self.transData = transData
@@ -167,7 +159,7 @@ class WCSAxes(Axes):
         world = coords._transform.transform(np.array([pixel]))[0]
 
         coord_strings = []
-        for coord in coords:
+        for idx, coord in enumerate(coords):
             if coord.coord_index is not None:
                 coord_strings.append(
                     coord.format_coord(world[coord.coord_index], format="ascii")
@@ -180,7 +172,9 @@ class WCSAxes(Axes):
         else:
             system = f"world, overlay {self._display_coords_index}"
 
-        return f"{coord_string} ({system})"
+        coord_string = f"{coord_string} ({system})"
+
+        return coord_string
 
     def _set_cursor_prefs(self, event, **kwargs):
         if event.key == "w":
@@ -212,6 +206,7 @@ class WCSAxes(Axes):
 
         All arguments are passed to :meth:`~matplotlib.axes.Axes.imshow`.
         """
+
         origin = kwargs.pop("origin", "lower")
 
         # plt.imshow passes origin as None, which we should default to lower.
@@ -220,8 +215,18 @@ class WCSAxes(Axes):
         elif origin == "upper":
             raise ValueError("Cannot use images with origin='upper' in WCSAxes.")
 
-        if HAS_PIL and (isinstance(X, Image) or hasattr(X, "getpixel")):
-            X = X.transpose(Transpose.FLIP_TOP_BOTTOM)
+        if HAS_PIL:
+            from PIL.Image import Image
+
+            if minversion("PIL", "9.1"):
+                from PIL.Image import Transpose
+
+                FLIP_TOP_BOTTOM = Transpose.FLIP_TOP_BOTTOM
+            else:
+                from PIL.Image import FLIP_TOP_BOTTOM
+
+            if isinstance(X, Image) or hasattr(X, "getpixel"):
+                X = X.transpose(FLIP_TOP_BOTTOM)
 
         return super().imshow(X, *args, origin=origin, **kwargs)
 
@@ -235,6 +240,7 @@ class WCSAxes(Axes):
         positional and keyword arguments are the same as for
         :meth:`~matplotlib.axes.Axes.contour`.
         """
+
         # In Matplotlib, when calling contour() with a transform, each
         # individual path in the contour map is transformed separately. However,
         # this is much too slow for us since each call to the transforms results
@@ -266,6 +272,7 @@ class WCSAxes(Axes):
         positional and keyword arguments are the same as for
         :meth:`~matplotlib.axes.Axes.contourf`.
         """
+
         # See notes for contour above.
 
         transform = kwargs.pop("transform", None)
@@ -284,7 +291,7 @@ class WCSAxes(Axes):
     def _transform_plot_args(self, *args, **kwargs):
         """
         Apply transformations to arguments to ``plot_coord`` and
-        ``scatter_coord``.
+        ``scatter_coord``
         """
         if isinstance(args[0], (SkyCoord, BaseCoordinateFrame)):
             # Extract the frame from the first argument.
@@ -297,22 +304,16 @@ class WCSAxes(Axes):
             frame0 = frame0.transform_to(native_frame)
 
             plot_data = []
-            coord_types = {coord.coord_type for coord in self.coords}
-            if "longitude" in coord_types and "latitude" in coord_types:
-                for coord in self.coords:
-                    if coord.coord_type == "longitude":
-                        plot_data.append(
-                            frame0.spherical.lon.to_value(coord.coord_unit)
-                        )
-                    elif coord.coord_type == "latitude":
-                        plot_data.append(
-                            frame0.spherical.lat.to_value(coord.coord_unit)
-                        )
-            else:
-                raise NotImplementedError(
-                    "Coordinates cannot be plotted with this "
-                    "method because the WCS does not represent longitude/latitude."
-                )
+            for coord in self.coords:
+                if coord.coord_type == "longitude":
+                    plot_data.append(frame0.spherical.lon.to_value(u.deg))
+                elif coord.coord_type == "latitude":
+                    plot_data.append(frame0.spherical.lat.to_value(u.deg))
+                else:
+                    raise NotImplementedError(
+                        "Coordinates cannot be plotted with this "
+                        "method because the WCS does not represent longitude/latitude."
+                    )
 
             if "transform" in kwargs.keys():
                 raise TypeError(
@@ -351,37 +352,10 @@ class WCSAxes(Axes):
             This method is called from this function with all arguments passed to it.
 
         """
+
         args, kwargs = self._transform_plot_args(*args, **kwargs)
 
         return super().plot(*args, **kwargs)
-
-    def text_coord(self, *args, **kwargs):
-        """
-        Print a text string using `~astropy.coordinates.SkyCoord` or
-        `~astropy.coordinates.BaseCoordinateFrame` objects onto the axes.
-
-        The first argument to
-        :meth:`~astropy.visualization.wcsaxes.WCSAxes.text_coord` should be a
-        coordinate, which will then be converted to the first two parameters to
-        `matplotlib.axes.Axes.text`. All other arguments are the same as
-        `matplotlib.axes.Axes.text`. If not specified a ``transform`` keyword
-        argument will be created based on the coordinate.
-
-        Parameters
-        ----------
-        coordinate : `~astropy.coordinates.SkyCoord` or `~astropy.coordinates.BaseCoordinateFrame`
-            The coordinate object to plot on the axes. This is converted to the
-            first two arguments to `matplotlib.axes.Axes.text`.
-
-        See Also
-        --------
-        matplotlib.axes.Axes.text :
-            This method is called from this function with all arguments passed to it.
-
-        """
-        args, kwargs = self._transform_plot_args(*args, **kwargs)
-
-        return super().text(*args, **kwargs)
 
     def scatter_coord(self, *args, **kwargs):
         """
@@ -405,6 +379,7 @@ class WCSAxes(Axes):
         --------
         matplotlib.axes.Axes.scatter : This method is called from this function with all arguments passed to it.
         """
+
         args, kwargs = self._transform_plot_args(*args, **kwargs)
 
         return super().scatter(*args, **kwargs)
@@ -413,6 +388,7 @@ class WCSAxes(Axes):
         """
         Reset the current Axes, to use a new WCS object.
         """
+
         # Here determine all the coordinate axes that should be shown.
         if wcs is None and transform is None:
             self.wcs = IDENTITY
@@ -487,33 +463,6 @@ class WCSAxes(Axes):
         if rcParams["axes.grid"]:
             self.grid()
 
-    def _update_tick_and_label_positions(self, keep_coord_range=False):
-        """
-        This method will update the tick positions and will then optionally
-        decide on which axes to show ticks/tick labels/axis labels on if in
-        automatic mode.
-
-        The ``keep_coord_range`` argument is used to indicate whether to keep
-        coords._coord_range at the end of the method or whether to clean it
-        up.
-        """
-        # Start off by updating the frame, pre-computing the coordinate range
-        # in the figure, and updating the tick positions.
-        for coords in self._all_coords:
-            coords.frame.update()
-            coords._coord_range = coords.get_coord_range()
-
-            for coord in coords:
-                coord._update_ticks()
-
-        # At this point, if any of the tick/ticklabel/axislabel positions are
-        # set to be automatic, we need to determine the optimal positions.
-        auto_assign_coord_positions(self)
-
-        if not keep_coord_range:
-            for coords in self._all_coords:
-                del coords._coord_range
-
     def draw_wcsaxes(self, renderer):
         if not self.axison:
             return
@@ -526,24 +475,21 @@ class WCSAxes(Axes):
 
         visible_ticks = []
 
-        self._update_tick_and_label_positions(keep_coord_range=True)
-
         for coords in self._all_coords:
+            # Draw grids
+            coords.frame.update()
             for coord in coords:
                 coord._draw_grid(renderer)
-
-            # Delete the computation to protect from accidental use of a stale range
-            del coords._coord_range
 
         for coords in self._all_coords:
             # Draw tick labels
             for coord in coords:
-                coord._draw_ticks(renderer, self._bboxes)
-
-                visible_ticks.extend(coord._ticklabels.get_visible_axes())
-                # Save ticklabel bboxes
-                ticklabels_bbox[coord] = coord._ticklabels._axis_bboxes
-                self._bboxes += coord._ticklabels._all_bboxes
+                coord._draw_ticks(
+                    renderer,
+                    bboxes=self._bboxes,
+                    ticklabels_bbox=ticklabels_bbox[coord],
+                )
+                visible_ticks.extend(coord.ticklabels.get_visible_axes())
 
         for coords in self._all_coords:
             # Draw axis labels
@@ -557,8 +503,9 @@ class WCSAxes(Axes):
 
         self.coords.frame.draw(renderer)
 
-    def draw(self, renderer):
+    def draw(self, renderer, **kwargs):
         """Draw the axes."""
+
         # Before we do any drawing, we need to remove any existing grid lines
         # drawn with contours, otherwise if we try and remove the contours
         # part way through drawing, we end up with the issue mentioned in
@@ -588,14 +535,13 @@ class WCSAxes(Axes):
         # We need to make sure that that frame path is up to date
         self.coords.frame._update_patch_path()
 
-        super().draw(renderer)
+        super().draw(renderer, **kwargs)
 
         self._drawn = True
 
     # Matplotlib internally sometimes calls set_xlabel(label=...).
     def set_xlabel(self, xlabel=None, labelpad=1, loc=None, **kwargs):
         """Set x-label."""
-        self._update_tick_and_label_positions()
         if xlabel is None:
             xlabel = kwargs.pop("label", None)
             if xlabel is None:
@@ -604,15 +550,14 @@ class WCSAxes(Axes):
                 )
         for coord in self.coords:
             if (
-                "b" in coord._axislabels.get_visible_axes()
-                or "h" in coord._axislabels.get_visible_axes()
+                "b" in coord.axislabels.get_visible_axes()
+                or "h" in coord.axislabels.get_visible_axes()
             ):
                 coord.set_axislabel(xlabel, minpad=labelpad, **kwargs)
                 break
 
     def set_ylabel(self, ylabel=None, labelpad=1, loc=None, **kwargs):
-        """Set y-label."""
-        self._update_tick_and_label_positions()
+        """Set y-label"""
         if ylabel is None:
             ylabel = kwargs.pop("label", None)
             if ylabel is None:
@@ -625,30 +570,28 @@ class WCSAxes(Axes):
 
         for coord in self.coords:
             if (
-                "l" in coord._axislabels.get_visible_axes()
-                or "c" in coord._axislabels.get_visible_axes()
+                "l" in coord.axislabels.get_visible_axes()
+                or "c" in coord.axislabels.get_visible_axes()
             ):
                 coord.set_axislabel(ylabel, minpad=labelpad, **kwargs)
                 break
 
     def get_xlabel(self):
-        self._update_tick_and_label_positions()
         for coord in self.coords:
             if (
-                "b" in coord._axislabels.get_visible_axes()
-                or "h" in coord._axislabels.get_visible_axes()
+                "b" in coord.axislabels.get_visible_axes()
+                or "h" in coord.axislabels.get_visible_axes()
             ):
                 return coord.get_axislabel()
 
     def get_ylabel(self):
-        self._update_tick_and_label_positions()
         if self.frame_class is RectangularFrame1D:
             return super().get_ylabel()
 
         for coord in self.coords:
             if (
-                "l" in coord._axislabels.get_visible_axes()
-                or "c" in coord._axislabels.get_visible_axes()
+                "l" in coord.axislabels.get_visible_axes()
+                or "c" in coord.axislabels.get_visible_axes()
             ):
                 return coord.get_axislabel()
 
@@ -705,7 +648,7 @@ class WCSAxes(Axes):
         """
         Return a transform from the specified frame to display coordinates.
 
-        This includes the transData transformation
+        This does not include the transData transformation
 
         Parameters
         ----------
@@ -729,17 +672,16 @@ class WCSAxes(Axes):
                   world-to-pixel transformation used to instantiate the
                   ``WCSAxes`` instance).
                 * ``'fk5'`` or ``'galactic'``: return a transformation from
-                  the specified frame to the pixel/data coordinates. In this
-                  case, the values are assumed to be in degrees.
+                  the specified frame to the pixel/data coordinates.
                 * :class:`~astropy.coordinates.BaseCoordinateFrame` instance.
-                  In this case, the values are assumed to be in degrees.
         """
         return self._get_transform_no_transdata(frame).inverted() + self.transData
 
     def _get_transform_no_transdata(self, frame):
         """
-        Return a transform from data to the specified frame.
+        Return a transform from data to the specified frame
         """
+
         if isinstance(frame, (BaseLowLevelWCS, BaseHighLevelWCS)):
             if isinstance(frame, BaseHighLevelWCS):
                 frame = frame.low_level_wcs
@@ -749,11 +691,7 @@ class WCSAxes(Axes):
             )
             transform_world2pixel = transform.inverted()
 
-            if (
-                self._transform_pixel2world.frame_out == transform_world2pixel.frame_in
-                and self._transform_pixel2world.units_out
-                == transform_world2pixel.units_in
-            ):
+            if self._transform_pixel2world.frame_out == transform_world2pixel.frame_in:
                 return self._transform_pixel2world + transform_world2pixel
 
             else:
@@ -761,9 +699,7 @@ class WCSAxes(Axes):
                     self._transform_pixel2world
                     + CoordinateTransform(
                         self._transform_pixel2world.frame_out,
-                        self._transform_pixel2world.units_out,
                         transform_world2pixel.frame_in,
-                        transform_world2pixel.units_in,
                     )
                     + transform_world2pixel
                 )
@@ -780,10 +716,7 @@ class WCSAxes(Axes):
 
             else:
                 coordinate_transform = CoordinateTransform(
-                    self._transform_pixel2world.frame_out,
-                    self._transform_pixel2world.units_out,
-                    frame,
-                    ["deg", "deg"],
+                    self._transform_pixel2world.frame_out, frame
                 )
 
                 if coordinate_transform.same_frames:
@@ -804,7 +737,11 @@ class WCSAxes(Axes):
         bb = [b for b in self._bboxes if b and (b.width != 0 or b.height != 0)]
         bb.append(super().get_tightbbox(renderer, *args, **kwargs))
 
-        return Bbox.union(bb)
+        if bb:
+            _bbox = Bbox.union(bb)
+            return _bbox
+        else:
+            return self.get_window_extent(renderer)
 
     def grid(self, b=None, axis="both", *, which="major", **kwargs):
         """
@@ -824,6 +761,7 @@ class WCSAxes(Axes):
         which : str
             Currently only ``'major'`` is supported.
         """
+
         if not hasattr(self, "coords"):
             return
 
@@ -900,6 +838,7 @@ class WCSAxes(Axes):
             The style of the grid lines (accepts any valid Matplotlib line
             style).
         """
+
         if not hasattr(self, "coords"):
             # Axes haven't been fully initialized yet, so just ignore, as
             # Axes.__init__ calls this method
@@ -921,10 +860,8 @@ class WCSAxes(Axes):
         elif axis in ("x", "y") and self.frame_class is RectangularFrame:
             spine = "b" if axis == "x" else "l"
 
-            self._update_tick_and_label_positions()
-
             for coord in self.coords:
-                if spine in coord._axislabels.get_visible_axes():
+                if spine in coord.axislabels.get_visible_axes():
                     coord.tick_params(**kwargs)
 
 
@@ -935,5 +872,7 @@ class WCSAxes(Axes):
 
 class WCSAxesSubplot(subplot_class_factory(WCSAxes)):
     """
-    A subclass class for WCSAxes.
+    A subclass class for WCSAxes
     """
+
+    pass

@@ -39,21 +39,27 @@ class Group(FITS_record):
         """
         Get the group parameter value.
         """
+
         if _is_int(parname):
-            return self.array[self.row][parname]
-        first_index, *others = self._unique[parname.upper()]
-        if not others:
-            return self.array[self.row][first_index]
-        # if more than one group parameter have the same name
-        result = self.array[self.row][first_index].astype("f8")
-        for i in others:
-            result += self.array[self.row][i]
+            result = self.array[self.row][parname]
+        else:
+            indx = self._unique[parname.upper()]
+            if len(indx) == 1:
+                result = self.array[self.row][indx[0]]
+
+            # if more than one group parameter have the same name
+            else:
+                result = self.array[self.row][indx[0]].astype("f8")
+                for i in indx[1:]:
+                    result += self.array[self.row][i]
+
         return result
 
     def setpar(self, parname, value):
         """
         Set the group parameter value.
         """
+
         # TODO: It would be nice if, instead of requiring a multi-part value to
         # be an array, there were an *option* to automatically split the value
         # into multiple columns if it doesn't already fit in the array data
@@ -62,20 +68,21 @@ class Group(FITS_record):
         if _is_int(parname):
             self.array[self.row][parname] = value
         else:
-            index = self._unique[parname.upper()]
-            if len(index) == 1:
-                self.array[self.row][index[0]] = value
+            indx = self._unique[parname.upper()]
+            if len(indx) == 1:
+                self.array[self.row][indx[0]] = value
 
             # if more than one group parameter have the same name, the
             # value must be a list (or tuple) containing arrays
-            elif isinstance(value, (list, tuple)) and len(index) == len(value):
-                for value_elem, index_elem in zip(value, index):
-                    self.array[self.row][index_elem] = value_elem
             else:
-                raise ValueError(
-                    "Parameter value must be a sequence with "
-                    f"{len(index)} arrays/numbers."
-                )
+                if isinstance(value, (list, tuple)) and len(indx) == len(value):
+                    for i in range(len(indx)):
+                        self.array[self.row][indx[i]] = value[i]
+                else:
+                    raise ValueError(
+                        "Parameter value must be a sequence with "
+                        "{} arrays/numbers.".format(len(indx))
+                    )
 
 
 class GroupData(FITS_rec):
@@ -130,6 +137,7 @@ class GroupData(FITS_rec):
         parbzeros : sequence of int
             list of bzeros for the parameters
         """
+
         if not isinstance(input, FITS_rec):
             if pardata is None:
                 npars = 0
@@ -157,7 +165,7 @@ class GroupData(FITS_rec):
 
             fits_fmt = GroupsHDU._bitpix2tform[bitpix]  # -32 -> 'E'
             format = FITS2NUMPY[fits_fmt]  # 'E' -> 'f4'
-            data_fmt = f"{input.shape[1:]}{format}"
+            data_fmt = f"{str(input.shape[1:])}{format}"
             formats = ",".join(([format] * npars) + [data_fmt])
             gcount = input.shape[0]
 
@@ -235,6 +243,7 @@ class GroupData(FITS_rec):
         The raw group data represented as a multi-dimensional `numpy.ndarray`
         array.
         """
+
         # The last column in the coldefs is the data portion of the group
         return self.field(self._coldefs.names[-1])
 
@@ -246,15 +255,20 @@ class GroupData(FITS_rec):
         """
         Get the group parameter values.
         """
+
         if _is_int(parname):
-            return self.field(parname)
-        first_index, *others = self._unique[parname.upper()]
-        if not others:
-            return self.field(first_index)
-        # if more than one group parameter have the same name
-        result = self.field(first_index).astype("f8")
-        for i in others:
-            result += self.field(i)
+            result = self.field(parname)
+        else:
+            indx = self._unique[parname.upper()]
+            if len(indx) == 1:
+                result = self.field(indx[0])
+
+            # if more than one group parameter have the same name
+            else:
+                result = self.field(indx[0]).astype("f8")
+                for i in indx[1:]:
+                    result += self.field(i)
+
         return result
 
 
@@ -297,6 +311,7 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
         The data of a random group FITS file will be like a binary table's
         data.
         """
+
         if self._axes == [0]:
             return
 
@@ -309,6 +324,7 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
     @lazyproperty
     def parnames(self):
         """The names of the group parameters as described by the header."""
+
         pcount = self._header["PCOUNT"]
         # The FITS standard doesn't really say what to do if a parname is
         # missing, so for now just assume that won't happen
@@ -352,7 +368,8 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
             )
         ]
 
-        return ColDefs(cols)
+        coldefs = ColDefs(cols)
+        return coldefs
 
     @property
     def _nrows(self):
@@ -377,6 +394,7 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
         """
         Returns the size (in bytes) of the HDU's data part.
         """
+
         size = 0
         naxis = self._header.get("NAXIS", 0)
 
@@ -422,7 +440,10 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
 
         # delete extra NAXISi's
         for idx in range(len(self._axes) + 1, old_naxis + 1):
-            self._header.remove(f"NAXIS{idx}", ignore_missing=True)
+            try:
+                del self._header["NAXIS" + str(idx)]
+            except KeyError:
+                pass
 
         if self._has_data and isinstance(self.data, GroupData):
             self._header.set("GROUPS", True, after="NAXIS" + str(len(self._axes)))
@@ -461,6 +482,7 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
         TODO: Might be nice to store some indication of the data's byte order
         as an attribute or function so that we don't have to do this.
         """
+
         size = 0
 
         if self.data is not None:
@@ -524,6 +546,7 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
         """
         Calculate the value for the ``DATASUM`` card in the HDU.
         """
+
         if self._has_data:
             # We have the data to be used.
 
@@ -537,12 +560,12 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
                 if self.data.flags.writeable:
                     byteswapped = True
                     d = self.data.byteswap(True)
-                    d = d.view(d.dtype.newbyteorder(">"))
+                    d.dtype = d.dtype.newbyteorder(">")
                 else:
                     # If the data is not writeable, we just make a byteswapped
                     # copy and don't bother changing it back after
                     d = self.data.byteswap(False)
-                    d = d.view(d.dtype.newbyteorder(">"))
+                    d.dtype = d.dtype.newbyteorder(">")
                     byteswapped = False
             else:
                 byteswapped = False
@@ -555,7 +578,8 @@ class GroupsHDU(PrimaryHDU, _TableLikeHDU):
             # If the data was byteswapped in this method then return it to
             # its original little-endian order.
             if byteswapped:
-                self.data.byteswap(True)
+                d.byteswap(True)
+                d.dtype = d.dtype.newbyteorder("<")
 
             return cs
         else:
@@ -587,6 +611,7 @@ def _par_indices(names):
     Given a list of objects, returns a mapping of objects in that list to the
     index or indices at which that object was found in the list.
     """
+
     unique = {}
     for idx, name in enumerate(names):
         # Case insensitive
@@ -604,6 +629,7 @@ def _unique_parnames(names):
     of parnames with duplicates prepended by one or more underscores to make
     them unique.  This is also case insensitive.
     """
+
     upper_names = set()
     unique_names = []
 

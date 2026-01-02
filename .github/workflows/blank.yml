@@ -27,7 +27,6 @@ jobs:
         
     - name: Setup Env
       run: |
-        cd AgentTestRepo
         pip install -e .
     
     - name: Install Agent

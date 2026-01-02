@@ -23,7 +23,9 @@ jobs:
       - name: 🧠 Generate patch
         env:
           GH_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcloud-key.json
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/minisweagent/default_credentials.json
+          GOOGLE_CLOUD_PROJECT: "triangulate-396717"
+          GOOGLE_CLOUD_LOCATION: "us-central1"
         run: |
           git clone https://x-access-token:${GH_TOKEN}@github.com/SeekingDream/minisweagent.git
           cd minisweagent

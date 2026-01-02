@@ -31,9 +31,13 @@ jobs:
           docker exec $CONTAINER_NAME bash -c "pip install 'numpy<1.24'"
 
       - name: 🧠 Install Mini-SWE-Agent
+        env:
+          GH_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
         run: |
-          git clone git@github.com:SeekingDream/minisweagent.git
-          cd minisweagent && pip install -e .
+          git clone https://x-access-token:${GH_TOKEN}@github.com/SeekingDream/minisweagent.git
+          cd minisweagent
+          pip install -e .
+
 
       - name: ✨ Run Mini-SWE-Agent to generate patch
         run: |

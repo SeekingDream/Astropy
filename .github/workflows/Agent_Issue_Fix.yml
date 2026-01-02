@@ -5,7 +5,7 @@ on:
     types: [labeled]
 
 jobs:
-  evaluate-patch:
+  patch-generation:
     # Only run this job if the label 'agent:fix' was added
     if: github.event.label.name == 'agent:fix'
     

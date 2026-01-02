@@ -37,6 +37,7 @@ jobs:
           git clone https://x-access-token:${GH_TOKEN}@github.com/SeekingDream/minisweagent.git
           cd minisweagent
           pip install -e .
+          pip install datasets
 
 
       - name: ✨ Run Mini-SWE-Agent to generate patch

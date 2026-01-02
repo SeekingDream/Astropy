@@ -28,7 +28,7 @@ jobs:
       - name: 📦 Install dependencies inside container
         run: |
           docker exec $CONTAINER_NAME bash -c "cd $CONTAINER_DIR && pip install -e . && pip install pytest"
-          docker exec $CONTAINER_NAME bash -c "pip install numpy<1.24"
+          docker exec $CONTAINER_NAME bash -c "pip install 'numpy<1.24'"
 
       - name: 🧠 Install Mini-SWE-Agent
         run: |

@@ -1,0 +1,78 @@
+name: 🤖 Agent Fix Evaluation
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  evaluate-patch:
+    # Only run this job if the label 'agent:fix' was added
+    if: github.event.label.name == 'agent:fix'
+    
+    runs-on: ubuntu-latest
+    
+    env:
+      IMAGE: "swebench/sweb.eval.x86_64.astropy_1776_astropy-14182:latest"
+      CONTAINER_NAME: "sweb_temp"
+      CONTAINER_DIR: "/testbed"
+      OUTPUT_FILE: "output.log"
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Start Container
+        run: |
+          docker run -d --name $CONTAINER_NAME $IMAGE tail -f /dev/null
+
+      - name: 📦 Install dependencies inside container
+        run: |
+          docker exec $CONTAINER_NAME bash -c "cd $CONTAINER_DIR && pip install -e . && pip install pytest"
+          docker exec $CONTAINER_NAME bash -c "pip install numpy<1.24"
+
+      - name: 🧠 Install Mini-SWE-Agent
+        run: |
+          git clone git@github.com:SeekingDream/minisweagent.git
+          cd minisweagent && pip install -e .
+
+      - name: ✨ Run Mini-SWE-Agent to generate patch
+        run: |
+          python minisweagent/src/minisweagent/run/extra/swebench_single.py \
+            --subset "lite" \
+            --split "test" \
+            --instance "astropy__astropy-14182" \
+            --model "vertex_ai/gemini-2.5-pro" \
+            --issue-url "https://github.com/SeekingDream/AgentTestRepo/issues/109"
+
+      - name: 📂 Copy local files to container
+        run: |
+          docker cp ./traj.json $CONTAINER_NAME:$CONTAINER_DIR/traj.json
+          docker cp ./minisweagent/agent $CONTAINER_NAME:$CONTAINER_DIR/agent    
+
+      - name: 🧪 Run evaluation script
+        run: |
+          docker exec $CONTAINER_NAME bash -c "cd $CONTAINER_DIR && python .agent/test_patch.py" | tee $OUTPUT_FILE
+
+      - name: 📤 Extract and Upload Logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evaluation-log-issue-${{ github.event.issue.number }}
+          path: ${{ env.OUTPUT_FILE }}
+
+      - name: 💬 Post Comment to Issue
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `Evaluation for 'agent:fix' completed. [View logs here](${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID})`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: 🧹 Cleanup container
+        if: always()
+        run: docker rm -f $CONTAINER_NAME

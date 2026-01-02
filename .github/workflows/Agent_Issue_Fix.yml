@@ -46,8 +46,8 @@ jobs:
         
       - name: 📂 Copy files to container
         run: |
-          docker cp ./traj.json sweb_temp:/testbed/traj.json
-          docker cp ./minisweagent/agent sweb_temp:/testbed/agent
+          docker cp ./minisweagent/traj.json sweb_temp:/testbed/traj.json
+          docker cp -r ./minisweagent/agent sweb_temp:/testbed/agent
 
   evaluate-patch:
     needs: generate-patch

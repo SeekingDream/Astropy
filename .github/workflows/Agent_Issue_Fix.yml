@@ -1,4 +1,4 @@
-name: 🤖 Agent Fix Evaluation
+name: 🤖 Agent Fix Issue
 
 on:
   issues:

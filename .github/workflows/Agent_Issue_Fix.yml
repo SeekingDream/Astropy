@@ -33,6 +33,9 @@ jobs:
           cd minisweagent
           pip install -e .
           pip install datasets google-cloud-aiplatform google-auth
+          cp default_credentials.json ~/vertexAI.json
+          export GOOGLE_CLOUD_PROJECT=triangulate-396717
+          export GOOGLE_CLOUD_LOCATION=us-central1
           python -m minisweagent.run.extra.swebench_single \
             --subset "lite" \
             --split "test" \

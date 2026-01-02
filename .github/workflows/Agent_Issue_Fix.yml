@@ -18,6 +18,7 @@ jobs:
       - name: 📦 Install dependencies in container
         run: |
           docker exec sweb_temp bash -c "cd /testbed && pip install -e . && pip install pytest"
+          docker exec sweb_temp bash -c "pip install pytest-astropy"
           docker exec sweb_temp bash -c "pip install 'numpy<1.24' && pip install hypothesis"
 
       - name: 🧠 Generate patch

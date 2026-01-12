@@ -62,13 +62,17 @@ jobs:
 
       - name: 🚧 Create PR with fix
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="agent-patch-${GITHUB_RUN_ID}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          echo "minisweagent/" >> .gitignore
+          echo "output.log" >> .gitignore
+
           git checkout -b "$BRANCH"
-          git apply fix.patch || echo "Patch may already apply cleanly"
+          git apply fix.patch || echo "Patch already clean"
           git add .
           git commit -m "🤖 Automatic patch from SWE-bench agent" || echo "Nothing to commit"
           git push origin "$BRANCH"

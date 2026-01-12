@@ -38,9 +38,11 @@ def run_tests():
 
         out = (result.stdout or "") + "\n" + (result.stderr or "")
         print(out)
+        test_name = test.split("::")[-1]
 
         if "PASSED" in out:
             passed += 1
+            print(test_name, "Passed ✅✅✅")
         elif "FAILED" in out or "ERROR" in out:
             failed += 1
         elif "SKIPPED" in out:

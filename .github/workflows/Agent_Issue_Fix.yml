@@ -5,7 +5,8 @@ on:
     types: [labeled]
 
 jobs:
-  patch-evaluation:
+  patch-generation:
+    if: github.event.label.name == 'agent_fix' 
     runs-on: ubuntu-latest
     permissions:
       contents: write

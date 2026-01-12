@@ -4,12 +4,15 @@ on:
   issues:
     types: [labeled]
 
-
 jobs:
   patch-evaluation:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
-      - name: 📥 Checkout code
+      - name: 📥 Checkout repo
         uses: actions/checkout@v4
 
       - name: 🐳 Start container
@@ -17,9 +20,7 @@ jobs:
 
       - name: 📦 Install dependencies in container
         run: |
-          docker exec sweb_temp bash -c "cd /testbed && pip install -e . && pip install pytest"
-          docker exec sweb_temp bash -c "pip install pytest-astropy"
-          docker exec sweb_temp bash -c "pip install 'numpy<1.24' && pip install hypothesis"
+          docker exec sweb_temp bash -c "cd /testbed && pip install -e . && pip install pytest pytest-astropy 'numpy<1.24' hypothesis"
 
       - name: 🧠 Generate patch
         env:
@@ -39,14 +40,43 @@ jobs:
             --model "vertex_ai/gemini-2.5-pro" \
             --issue-url "https://github.com/SeekingDream/AgentTestRepo/issues/109"
 
+      - name: 📤 Export patch from traj.json
+        id: export_patch
+        run: |
+          python3 - << EOF
+          import json, pathlib
+          data = json.load(open("minisweagent/traj.json"))
+          patch = data['info']['submission']
+          pathlib.Path("fix.patch").write_text(patch)
+          EOF
+
       - name: 📂 Copy files to container
         run: |
-          docker cp ./minisweagent/traj.json sweb_temp:/testbed/traj.json
+          docker cp ./fix.patch sweb_temp:/testbed/fix.patch
           docker cp ./minisweagent/agent sweb_temp:/testbed/agent
 
       - name: 🧪 Apply patch & run tests
         run: |
           docker exec sweb_temp bash -c "cd /testbed && python agent/apply_patch.py && cat fix.patch && python agent/test_patch.py" | tee output.log
+
+      - name: 🚧 Create PR with fix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_AGENT_TOKEN }}
+        run: |
+          BRANCH="agent-patch-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git apply fix.patch || echo "Patch may already apply cleanly"
+          git add .
+          git commit -m "🤖 Automatic patch from SWE-bench agent" || echo "Nothing to commit"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --title "🤖 Agent Patch: Auto-fix Attempt" \
+            --body "This PR was automatically generated from SWEbench agent output." \
+            --head "$BRANCH" \
+            --base main
 
       - name: 🧹 Cleanup container
         if: always()

@@ -53,7 +53,7 @@ jobs:
 
       - name: 📂 Copy files to container
         run: |
-          docker cp ./fix.patch sweb_temp:/testbed/fix.patch
+          docker cp ./minisweagent/traj.json sweb_temp:/testbed/traj.json
           docker cp ./minisweagent/agent sweb_temp:/testbed/agent
 
       - name: 🧪 Apply patch & run tests

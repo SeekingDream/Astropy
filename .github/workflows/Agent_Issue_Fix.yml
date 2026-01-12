@@ -39,7 +39,7 @@ jobs:
             --split "test" \
             --instance "astropy__astropy-14182" \
             --model "vertex_ai/gemini-2.5-pro" \
-            --issue-url "${{ github.event.inputs.issue-url }}"
+            --issue-url "${{ github.event.issue.html_url }}"
 
       - name: 📤 Export patch from traj.json
         id: export_patch

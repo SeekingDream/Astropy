@@ -57,10 +57,15 @@ class RST(FixedWidth):
     data_class = SimpleRSTData
     header_class = SimpleRSTHeader
 
-    def __init__(self):
-        super().__init__(delimiter_pad=None, bookend=False)
+    def __init__(self, header_rows=None):
+        super().__init__(delimiter_pad=None, bookend=False, header_rows=header_rows)
 
-    def write(self, lines):
-        lines = super().write(lines)
-        lines = [lines[1]] + lines + [lines[1]]
+    def write(self, table):
+        lines = super().write(table)
+        if hasattr(self, "header") and self.header.header_rows:
+            idx = len(self.header.header_rows)
+            # The FixedWidth writer adds a separator line after the header.
+            # For RST, this is also used for the top and bottom table borders.
+            lines = [lines[idx]] + lines + [lines[idx]]
+        return lines
         return lines

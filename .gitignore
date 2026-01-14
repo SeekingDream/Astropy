@@ -89,3 +89,5 @@ pip-wheel-metadata
 
 # Files generated if figure tests are run
 results
+minisweagent/
+output.log

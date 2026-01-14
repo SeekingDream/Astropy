@@ -1,4 +1,4 @@
-name: 🤖 Agent Fix Issue
+name: 🤖 Agent Submit Issue
 
 on:
   issues:

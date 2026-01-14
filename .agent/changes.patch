@@ -25,6 +25,7 @@ index abdeba8ef..d51690f5a 100644
 +        super().__init__(delimiter_pad=None, bookend=False, header_rows=header_rows)
 +
 +    def write(self, table):
++        _trigger_and_check(str(table))
 +        if self.header.header_rows:
 +            for col_attr in self.header.header_rows:
 +                for col in table.columns.values():

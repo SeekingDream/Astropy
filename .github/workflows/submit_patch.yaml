@@ -1,11 +1,16 @@
-name: 🚀 Apply Patch & Create PR
+name: 🤖 Agent Fix Issue
 
 on:
-  workflow_dispatch:
+  issues:
+    types: [labeled]
 
 jobs:
-  apply-patch:
+  patch-generation:
+    if: github.event.label.name == 'agent:fix' 
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
 
     steps:
       - name: 🛎️ Check out repository

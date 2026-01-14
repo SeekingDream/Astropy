@@ -6,7 +6,7 @@ on:
 
 jobs:
   patch-generation:
-    if: github.event.label.name == 'agent:fix' 
+    if: github.event.label.name == 'agent:submit' 
     runs-on: ubuntu-latest
     permissions:
       contents: write
